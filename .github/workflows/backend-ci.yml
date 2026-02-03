@@ -1,0 +1,60 @@
+name: Backend CI
+
+on:
+  pull_request:
+  push:
+    branches: ["main"]
+
+jobs:
+  test:
+    uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/java-test.yml@main
+    with:
+      java_version: "21"
+      pom_path: "pom.xml"
+
+  sonar:
+    needs: test
+    uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/sonarqube-analysis.yml@main
+    with:
+      java_version: "21"
+      pom_path: "pom.xml"
+      sonar_project_key: "my-backend"
+      run_quality_gate: true
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+  build:
+    needs: sonar
+    uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/java-build.yml@main
+    with:
+      project_name: "my-backend"
+      java_version: "21"
+      pom_path: "pom.xml"
+      build_command: "mvn -B clean package -DskipTests"
+
+  docker:
+    needs: build
+    uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/docker-build-push.yml@main
+    with:
+      project_name: "my-backend"
+      artifact_name: ${{ needs.build.outputs.artifact_name }}
+      image_name: "myregistry/my-backend"
+      # IMPORTANT: use real && not &amp;&amp;
+      push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    secrets:
+      REGISTRY_URL: ${{ secrets.REGISTRY_URL }}
+      REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+      REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+
+  notify-on-failure:
+    needs: [test, sonar, build, docker]
+    if: failure()
+    uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/teams-notifier.yml@main
+    with:
+      project_name: "my-backend"
+      component_name: "JAVA-BACKEND"
+      status: "FAILURE"
+    secrets:
+      # IMPORTANT: keep ONLY the secret value here
+      WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
