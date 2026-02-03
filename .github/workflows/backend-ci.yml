@@ -50,7 +50,7 @@ jobs:
   notify-on-failure:
     needs: [test, sonar, build, docker]
     if: failure()
-    uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/teams-notifier.yml@main
+    uses: Bhuvaneshwaran-17/central-devops-tooling/.github/workflows/teams-notifier.yml@main
     with:
       project_name: "my-backend"
       component_name: "JAVA-BACKEND"
