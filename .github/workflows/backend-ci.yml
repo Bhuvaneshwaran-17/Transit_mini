@@ -5,7 +5,6 @@ on:
   push:
     branches: ["main"]
 
-# Good practice for docker push + checkout
 permissions:
   contents: read
   packages: write
@@ -14,37 +13,41 @@ concurrency:
   group: backend-ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Reuse the same service list everywhere (YAML anchor)
+# NOTE: YAML anchors are supported because this is valid YAML.
+# If you ever face parsing issues, copy the list into each matrix block instead.
 jobs:
   test:
     name: Test - ${{ matrix.svc.name }}
     strategy:
       fail-fast: false
       matrix:
-        svc:
+        svc: &services
           - name: auth
             pom_path: Auth/apps/pom.xml
             workdir: Auth/apps
             sonar_key: auth-backend
             image: myregistry/auth
-            artifact: auth-artifact
+            dockerfile: Auth/apps/Dockerfile
+
           - name: tap
             pom_path: Tap/transport/pom.xml
             workdir: Tap/transport
             sonar_key: tap-backend
             image: myregistry/tap
-            artifact: tap-artifact
+            dockerfile: Tap/transport/Dockerfile
+
           - name: transitcard
             pom_path: TransitCard/TransitCard/pom.xml
             workdir: TransitCard/TransitCard
             sonar_key: transitcard-backend
             image: myregistry/transitcard
-            artifact: transitcard-artifact
+            dockerfile: TransitCard/TransitCard/Dockerfile
 
     uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/java-test.yml@main
     with:
       java_version: "21"
       pom_path: ${{ matrix.svc.pom_path }}
-      # IMPORTANT: make artifact name unique (requires small reusable workflow update below)
       reports_artifact_name: test-reports-${{ matrix.svc.name }}
 
   sonar:
@@ -53,16 +56,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        svc:
-          - name: auth
-            pom_path: Auth/apps/pom.xml
-            sonar_key: auth-backend
-          - name: tap
-            pom_path: Tap/transport/pom.xml
-            sonar_key: tap-backend
-          - name: transitcard
-            pom_path: TransitCard/TransitCard/pom.xml
-            sonar_key: transitcard-backend
+        svc: *services
 
     uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/sonarqube-analysis.yml@main
     with:
@@ -80,16 +74,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        svc:
-          - name: auth
-            pom_path: Auth/apps/pom.xml
-            artifact: auth-artifact
-          - name: tap
-            pom_path: Tap/transport/pom.xml
-            artifact: tap-artifact
-          - name: transitcard
-            pom_path: TransitCard/TransitCard/pom.xml
-            artifact: transitcard-artifact
+        svc: *services
 
     uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/java-build.yml@main
     with:
@@ -97,8 +82,6 @@ jobs:
       java_version: "21"
       pom_path: ${{ matrix.svc.pom_path }}
       build_command: "mvn -B clean package -DskipTests"
-      # OPTIONAL but recommended: pass deterministic artifact name (requires reusable workflow support)
-      artifact_name: ${{ matrix.svc.artifact }}
 
   docker:
     name: Docker - ${{ matrix.svc.name }}
@@ -106,36 +89,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        svc:
-          - name: auth
-            workdir: Auth/apps
-            image: myregistry/auth
-            artifact: auth-artifact
-          - name: tap
-            workdir: Tap/transport
-            image: myregistry/tap
-            artifact: tap-artifact
-          - name: transitcard
-            workdir: TransitCard/TransitCard
-            image: myregistry/transitcard
-            artifact: transitcard-artifact
+        svc: *services
 
     uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/docker-build-push.yml@main
     with:
       project_name: ${{ matrix.svc.name }}
       image_name: ${{ matrix.svc.image }}
-
-      # Choose ONE of the below approaches depending on how your reusable docker workflow works:
-
-      # (A) If your docker workflow builds from artifact:
-      artifact_name: ${{ matrix.svc.artifact }}
-
-      # (B) If your docker workflow builds from Docker context (recommended for your multi-stage Dockerfile):
-      docker_context: ${{ matrix.svc.workdir }}
-      dockerfile_path: ${{ matrix.svc.workdir }}/Dockerfile
-
+      context: ${{ matrix.svc.workdir }}
+      dockerfile: ${{ matrix.svc.dockerfile }}
       push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-
+      # artifact_name is optional in your reusable docker workflow,
+      # but NOT needed for your multi-stage Dockerfile.
+      # artifact_name: ""
     secrets:
       REGISTRY_URL: ${{ secrets.REGISTRY_URL }}
       REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
