@@ -1,47 +1,141 @@
-name: Backend CI
+name: Backend CI (Monorepo)
 
 on:
   pull_request:
   push:
     branches: ["main"]
 
+# Good practice for docker push + checkout
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
+    name: Test - ${{ matrix.svc.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        svc:
+          - name: auth
+            pom_path: Auth/apps/pom.xml
+            workdir: Auth/apps
+            sonar_key: auth-backend
+            image: myregistry/auth
+            artifact: auth-artifact
+          - name: tap
+            pom_path: Tap/transport/pom.xml
+            workdir: Tap/transport
+            sonar_key: tap-backend
+            image: myregistry/tap
+            artifact: tap-artifact
+          - name: transitcard
+            pom_path: TransitCard/TransitCard/pom.xml
+            workdir: TransitCard/TransitCard
+            sonar_key: transitcard-backend
+            image: myregistry/transitcard
+            artifact: transitcard-artifact
+
     uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/java-test.yml@main
     with:
       java_version: "21"
-      pom_path: "pom.xml"
+      pom_path: ${{ matrix.svc.pom_path }}
+      # IMPORTANT: make artifact name unique (requires small reusable workflow update below)
+      reports_artifact_name: test-reports-${{ matrix.svc.name }}
 
   sonar:
+    name: Sonar - ${{ matrix.svc.name }}
     needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        svc:
+          - name: auth
+            pom_path: Auth/apps/pom.xml
+            sonar_key: auth-backend
+          - name: tap
+            pom_path: Tap/transport/pom.xml
+            sonar_key: tap-backend
+          - name: transitcard
+            pom_path: TransitCard/TransitCard/pom.xml
+            sonar_key: transitcard-backend
+
     uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/sonarqube-analysis.yml@main
     with:
       java_version: "21"
-      pom_path: "pom.xml"
-      sonar_project_key: "my-backend"
+      pom_path: ${{ matrix.svc.pom_path }}
+      sonar_project_key: ${{ matrix.svc.sonar_key }}
       run_quality_gate: true
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
   build:
+    name: Build - ${{ matrix.svc.name }}
     needs: sonar
+    strategy:
+      fail-fast: false
+      matrix:
+        svc:
+          - name: auth
+            pom_path: Auth/apps/pom.xml
+            artifact: auth-artifact
+          - name: tap
+            pom_path: Tap/transport/pom.xml
+            artifact: tap-artifact
+          - name: transitcard
+            pom_path: TransitCard/TransitCard/pom.xml
+            artifact: transitcard-artifact
+
     uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/java-build.yml@main
     with:
-      project_name: "my-backend"
+      project_name: ${{ matrix.svc.name }}
       java_version: "21"
-      pom_path: "pom.xml"
+      pom_path: ${{ matrix.svc.pom_path }}
       build_command: "mvn -B clean package -DskipTests"
+      # OPTIONAL but recommended: pass deterministic artifact name (requires reusable workflow support)
+      artifact_name: ${{ matrix.svc.artifact }}
 
   docker:
+    name: Docker - ${{ matrix.svc.name }}
     needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        svc:
+          - name: auth
+            workdir: Auth/apps
+            image: myregistry/auth
+            artifact: auth-artifact
+          - name: tap
+            workdir: Tap/transport
+            image: myregistry/tap
+            artifact: tap-artifact
+          - name: transitcard
+            workdir: TransitCard/TransitCard
+            image: myregistry/transitcard
+            artifact: transitcard-artifact
+
     uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/docker-build-push.yml@main
     with:
-      project_name: "my-backend"
-      artifact_name: ${{ needs.build.outputs.artifact_name }}
-      image_name: "myregistry/my-backend"
-      # IMPORTANT: use real && not &amp;&amp;
+      project_name: ${{ matrix.svc.name }}
+      image_name: ${{ matrix.svc.image }}
+
+      # Choose ONE of the below approaches depending on how your reusable docker workflow works:
+
+      # (A) If your docker workflow builds from artifact:
+      artifact_name: ${{ matrix.svc.artifact }}
+
+      # (B) If your docker workflow builds from Docker context (recommended for your multi-stage Dockerfile):
+      docker_context: ${{ matrix.svc.workdir }}
+      dockerfile_path: ${{ matrix.svc.workdir }}/Dockerfile
+
       push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
     secrets:
       REGISTRY_URL: ${{ secrets.REGISTRY_URL }}
       REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
@@ -52,9 +146,8 @@ jobs:
     if: failure()
     uses: Bhuvaneshwaran-17/central-devops-tooling/.github/workflows/teams-notifier.yml@main
     with:
-      project_name: "my-backend"
+      project_name: "monorepo-backend"
       component_name: "JAVA-BACKEND"
       status: "FAILURE"
     secrets:
-      # IMPORTANT: keep ONLY the secret value here
       WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
