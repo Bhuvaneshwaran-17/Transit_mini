@@ -13,9 +13,6 @@ concurrency:
   group: backend-ci-${{ github.ref }}
   cancel-in-progress: true
 
-# Reuse the same service list everywhere (YAML anchor)
-# NOTE: YAML anchors are supported because this is valid YAML.
-# If you ever face parsing issues, copy the list into each matrix block instead.
 jobs:
   test:
     name: Test - ${{ matrix.svc.name }}
@@ -67,6 +64,7 @@ jobs:
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      SONAR_ORG_KEY: ${{ secrets.SONAR_ORG_KEY }}
 
   build:
     name: Build - ${{ matrix.svc.name }}
@@ -98,9 +96,6 @@ jobs:
       context: ${{ matrix.svc.workdir }}
       dockerfile: ${{ matrix.svc.dockerfile }}
       push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-      # artifact_name is optional in your reusable docker workflow,
-      # but NOT needed for your multi-stage Dockerfile.
-      # artifact_name: ""
     secrets:
       REGISTRY_URL: ${{ secrets.REGISTRY_URL }}
       REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
