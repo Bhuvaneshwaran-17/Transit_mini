@@ -25,19 +25,19 @@ jobs:
             workdir: Auth/apps
             sonar_key: auth-backend
             dockerfile: Auth/apps/Dockerfile
-            image_name: your-dockerhub-username/auth
+            image_name: bhuvi2003/auth
           - name: tap
             pom_path: Tap/transport/pom.xml
             workdir: Tap/transport
             sonar_key: tap-backend
             dockerfile: Tap/transport/Dockerfile
-            image_name: your-dockerhub-username/tap
+            image_name: bhuvi2003/tap
           - name: transitcard
             pom_path: TransitCard/TransitCard/pom.xml
             workdir: TransitCard/TransitCard
             sonar_key: transitcard-backend
             dockerfile: TransitCard/TransitCard/Dockerfile
-            image_name: your-dockerhub-username/transitcard
+            image_name: bhuvi2003/transitcard
 
     uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/java-test.yml@main
     with:
