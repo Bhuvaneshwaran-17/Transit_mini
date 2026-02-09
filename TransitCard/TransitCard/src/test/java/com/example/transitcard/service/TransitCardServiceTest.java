@@ -1,133 +1,83 @@
-//package com.example.transitcard.service;
-//
-//import com.example.transitcard.model.CardType;
-//import com.example.transitcard.model.TransitCard;
-//import com.example.transitcard.repository.TransitCardRepository;
-//import org.junit.jupiter.api.Test;
-//import org.junit.jupiter.api.extension.ExtendWith;
-//import org.mockito.InjectMocks;
-//import org.mockito.Mock;
-//import org.mockito.junit.jupiter.MockitoExtension;
-//
-//import java.util.List;
-//import java.util.Optional;
-//
-//import static org.junit.jupiter.api.Assertions.*;
-//import static org.mockito.Mockito.*;
-//
-//@ExtendWith(MockitoExtension.class)
-//class TransitCardServiceTest {
-//
-//    @Mock
-//    private TransitCardRepository repository;
-//
-//    @InjectMocks
-//    private TransitCardService service;
-//
-//    // ✅ Test 1: Buy STUDENT card successfully
-//    @Test
-//    void shouldBuyStudentCardSuccessfully() {
-//
-//        TransitCard card = new TransitCard();
-//        card.setCardType(CardType.STUDENT);
-//
-//        Long userId = 1L;
-//
-//        when(repository.existsByUserIdAndCardType(userId, CardType.STUDENT))
-//                .thenReturn(false);
-//
-//        when(repository.save(any(TransitCard.class)))
-//                .thenAnswer(invocation -> invocation.getArgument(0));
-//
-//        Optional<TransitCard> result = service.buyCard(card, userId);
-//
-//        assertTrue(result.isPresent());
-//        assertEquals(CardType.STUDENT, result.get().getCardType());
-//        assertEquals(userId, result.get().getUserId());
-//        assertTrue(result.get().isCardActive());
-//
-//        verify(repository).save(card);
-//    }
-//
-//    // ❌ Test 2: Prevent duplicate STUDENT card
-//    @Test
-//    void shouldNotAllowDuplicateStudentCard() {
-//
-//        TransitCard card = new TransitCard();
-//        card.setCardType(CardType.STUDENT);
-//
-//        Long userId = 1L;
-//
-//        when(repository.existsByUserIdAndCardType(userId, CardType.STUDENT))
-//                .thenReturn(true);
-//
-//        Optional<TransitCard> result = service.buyCard(card, userId);
-//
-//        assertTrue(result.isEmpty());
-//
-//        verify(repository, never()).save(any());
-//    }
-//
-//    // ✅ Test 3: Buy REGULAR card successfully
-//    @Test
-//    void shouldBuyRegularCardSuccessfully() {
-//
-//        TransitCard card = new TransitCard();
-//        card.setCardType(CardType.REGULAR);
-//
-//        Long userId = 1L;
-//
-//        when(repository.existsByUserIdAndCardType(userId, CardType.REGULAR))
-//                .thenReturn(false);
-//
-//        when(repository.save(any(TransitCard.class)))
-//                .thenAnswer(invocation -> invocation.getArgument(0));
-//
-//        Optional<TransitCard> result = service.buyCard(card, userId);
-//
-//        assertTrue(result.isPresent());
-//        assertEquals(CardType.REGULAR, result.get().getCardType());
-//
-//        verify(repository).save(card);
-//    }
-//
-//    // ❌ Test 4: Prevent duplicate REGULAR card
-//    @Test
-//    void shouldNotAllowDuplicateRegularCard() {
-//
-//        TransitCard card = new TransitCard();
-//        card.setCardType(CardType.REGULAR);
-//
-//        Long userId = 1L;
-//
-//        when(repository.existsByUserIdAndCardType(userId, CardType.REGULAR))
-//                .thenReturn(true);
-//
-//        Optional<TransitCard> result = service.buyCard(card, userId);
-//
-//        assertTrue(result.isEmpty());
-//
-//        verify(repository, never()).save(any());
-//    }
-//
-//    // ✅ Test 5: Get user cards
-//    @Test
-//    void shouldReturnUserCards() {
-//
-//        Long userId = 1L;
-//
-//        TransitCard studentCard = new TransitCard();
-//        studentCard.setCardType(CardType.STUDENT);
-//
-//        TransitCard regularCard = new TransitCard();
-//        regularCard.setCardType(CardType.REGULAR);
-//
-//        when(repository.findByUserId(userId))
-//                .thenReturn(List.of(studentCard, regularCard));
-//
-//        List<TransitCard> cards = service.getMyCards(userId);
-//
-//        assertEquals(2, cards.size());
-//        verify(repository).findByUserId(userId);
-//    }
-//}
+package com.example.transitcard.service;
+
+import com.example.transitcard.model.CardType;
+import com.example.transitcard.model.TransitCard;
+import com.example.transitcard.repository.TransitCardRepository;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.util.List;
+import java.util.Optional;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
+class TransitCardServiceTest {
+
+    @Mock
+    private TransitCardRepository repository;
+
+    @InjectMocks
+    private TransitCardService service;
+
+    @Test
+    void buyCard_ShouldReturnEmpty_WhenUserAlreadyHasCardType() {
+        // Arrange
+        Long userId = 1L;
+        TransitCard cardRequest = new TransitCard();
+        cardRequest.setCardType(CardType.STUDENT);
+
+        when(repository.existsByUserIdAndCardType(userId, CardType.STUDENT)).thenReturn(true);
+
+        // Act
+        Optional<TransitCard> result = service.buyCard(cardRequest, userId);
+
+        // Assert
+        assertTrue(result.isEmpty(), "Should return empty when the user already owns this card type");
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void buyCard_ShouldSaveAndReturnCard_WhenUserDoesNotHaveCardType() {
+        // Arrange
+        Long userId = 1L;
+        TransitCard cardRequest = new TransitCard();
+        cardRequest.setCardType(CardType.REGULAR);
+
+        when(repository.existsByUserIdAndCardType(userId, CardType.REGULAR)).thenReturn(false);
+        // Return the saved card so we can inspect the generated fields
+        when(repository.save(any(TransitCard.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        // Act
+        Optional<TransitCard> result = service.buyCard(cardRequest, userId);
+
+        // Assert
+        assertTrue(result.isPresent());
+        TransitCard savedCard = result.get();
+        assertEquals(userId, savedCard.getUserId());
+        assertEquals(Boolean.TRUE, savedCard.getCardActive());
+        assertNotNull(savedCard.getCardNumber());
+        assertTrue(savedCard.getCardNumber().startsWith("TC-REGULAR-"));
+        verify(repository, times(1)).save(any());
+    }
+
+    @Test
+    void getMyCards_ShouldReturnListOfCards() {
+        // Arrange
+        Long userId = 1L;
+        List<TransitCard> mockCards = List.of(new TransitCard(), new TransitCard());
+        when(repository.findByUserId(userId)).thenReturn(mockCards);
+
+        // Act
+        List<TransitCard> result = service.getMyCards(userId);
+
+        // Assert
+        assertEquals(2, result.size());
+        verify(repository, times(1)).findByUserId(userId);
+    }
+}

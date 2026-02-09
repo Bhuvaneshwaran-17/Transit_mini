@@ -9,9 +9,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -25,8 +26,12 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc(addFilters = false)
-@org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest(TransitCardController.class)// disables security filters
+/**
+ * Corrected Test class for TransitCardController.
+ * Bhuvi, notice the fixed imports for WebMvcTest and AutoConfigureMockMvc.
+ */
+@WebMvcTest(TransitCardController.class)
+@AutoConfigureMockMvc(addFilters = false) // Disables security for this specific test
 public class TransitCardControllerTest {
 
     @Autowired
@@ -41,6 +46,9 @@ public class TransitCardControllerTest {
     @MockitoBean
     private JwtService jwtService;
 
+    @MockitoBean
+    private UserDetailsService userDetailsService; // Added to satisfy security context
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     // Helper Principal
@@ -48,13 +56,10 @@ public class TransitCardControllerTest {
         return () -> "1"; // userId = 1
     }
 
-    // Test 1: Buy card successfully
     @Test
     void buyCard_shouldReturn200_whenCardPurchased() throws Exception {
-
         TransitCard card = new TransitCard();
         card.setCardType(CardType.STUDENT);
-
         card.setBalance(40.0);
 
         Mockito.when(service.buyCard(any(TransitCard.class), eq(1L)))
@@ -69,10 +74,8 @@ public class TransitCardControllerTest {
                 .andExpect(jsonPath("$.balance").value(40.0));
     }
 
-    // Test 2: Buy card when user already has one (409)
     @Test
     void buyCard_shouldReturn409_whenUserAlreadyHasCard() throws Exception {
-
         TransitCard card = new TransitCard();
 
         Mockito.when(service.buyCard(any(TransitCard.class), eq(1L)))
@@ -86,10 +89,8 @@ public class TransitCardControllerTest {
                 .andExpect(content().string("You already own this type of card."));
     }
 
-    // Test 3: Get cards successfully
     @Test
     void getMyCards_shouldReturn200_whenCardsExist() throws Exception {
-
         TransitCard card = new TransitCard();
         card.setCardType(CardType.STUDENT);
 
@@ -102,10 +103,8 @@ public class TransitCardControllerTest {
                 .andExpect(jsonPath("$[0].cardType").value("STUDENT"));
     }
 
-    // Test 4: Get cards when user has none (404)
     @Test
     void getMyCards_shouldReturn404_whenNoCardsExist() throws Exception {
-
         Mockito.when(service.getMyCards(1L))
                 .thenReturn(List.of());
 
