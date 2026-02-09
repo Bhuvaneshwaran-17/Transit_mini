@@ -110,4 +110,4 @@ jobs:
       component_name: "JAVA-BACKEND"
       status: "FAILURE"
     secrets:
-      WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+      WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }} 
