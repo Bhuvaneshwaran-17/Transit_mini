@@ -1,4 +1,3 @@
-
 package com.umb.apps.payment.config;
 
 import com.umb.apps.payment.security.JwtAuthenticationFilter;
@@ -21,7 +20,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-import java.util.Arrays;
+import java.util.List;
 
 @Configuration
 @EnableWebSecurity
@@ -41,7 +40,7 @@ public class SecurityConfig {
                         .requestMatchers("/users/register", "/auth/login").permitAll()
                         .anyRequest().authenticated()
                 )
-                .authenticationProvider(daoAuthProvider()) // use our provider bean
+                .authenticationProvider(daoAuthProvider())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
@@ -50,17 +49,9 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-
-        // ALLOW the teammate's origin
-        configuration.setAllowedOrigins(Arrays.asList("http://localhost:3002"));
-
-        // ALLOW the standard REST methods
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-
-        // ALLOW the headers your JWT filter needs
-        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type"));
-
-        // ALLOW credentials (cookies/auth headers)
+        configuration.setAllowedOrigins(List.of("http://localhost:3002"));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
         configuration.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -70,7 +61,9 @@ public class SecurityConfig {
 
     @Bean
     public DaoAuthenticationProvider daoAuthProvider() {
-        DaoAuthenticationProvider provider = new DaoAuthenticationProvider(userDetailsService);
+        // FIX: Use the no-args constructor and then use setters
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
+        provider.setUserDetailsService(userDetailsService);
         provider.setPasswordEncoder(passwordEncoder());
         return provider;
     }
