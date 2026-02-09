@@ -26,14 +26,12 @@ jobs:
             sonar_key: auth-backend
             image: myregistry/auth
             dockerfile: Auth/apps/Dockerfile
-
           - name: tap
             pom_path: Tap/transport/pom.xml
             workdir: Tap/transport
             sonar_key: tap-backend
             image: myregistry/tap
             dockerfile: Tap/transport/Dockerfile
-
           - name: transitcard
             pom_path: TransitCard/TransitCard/pom.xml
             workdir: TransitCard/TransitCard
@@ -46,6 +44,8 @@ jobs:
       java_version: "21"
       pom_path: ${{ matrix.svc.pom_path }}
       reports_artifact_name: test-reports-${{ matrix.svc.name }}
+    secrets:
+      TEAMS_WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
 
   sonar:
     name: Sonar - ${{ matrix.svc.name }}
@@ -54,7 +54,6 @@ jobs:
       fail-fast: false
       matrix:
         svc: *services
-
     uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/sonarqube-analysis.yml@main
     with:
       java_version: "21"
@@ -65,6 +64,7 @@ jobs:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
       SONAR_ORG_KEY: ${{ secrets.SONAR_ORG_KEY }}
+      TEAMS_WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
 
   build:
     name: Build - ${{ matrix.svc.name }}
@@ -73,13 +73,14 @@ jobs:
       fail-fast: false
       matrix:
         svc: *services
-
     uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/java-build.yml@main
     with:
       project_name: ${{ matrix.svc.name }}
       java_version: "21"
       pom_path: ${{ matrix.svc.pom_path }}
       build_command: "mvn -B clean package -DskipTests"
+    secrets:
+      TEAMS_WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
 
   docker:
     name: Docker - ${{ matrix.svc.name }}
@@ -88,7 +89,6 @@ jobs:
       fail-fast: false
       matrix:
         svc: *services
-
     uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/docker-build-push.yml@main
     with:
       project_name: ${{ matrix.svc.name }}
@@ -100,14 +100,4 @@ jobs:
       REGISTRY_URL: ${{ secrets.REGISTRY_URL }}
       REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
       REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
-
-  notify-on-failure:
-    needs: [test, sonar, build, docker]
-    if: failure()
-    uses: Bhuvaneshwaran-17/central-devops-tooling/.github/workflows/teams-notifier.yml@main
-    with:
-      project_name: "monorepo-backend"
-      component_name: "JAVA-BACKEND"
-      status: "FAILURE"
-    secrets:
-      WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }} 
+      TEAMS_WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
