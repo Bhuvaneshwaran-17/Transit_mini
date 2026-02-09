@@ -43,23 +43,5 @@ public class User implements UserDetails { // <--- YOU MUST ADD THIS
         return this.userName; // Maps your custom column to Spring's requirement
     }
 
-    @Override
-    public boolean isAccountNonExpired() {
-        return true;
-    }
 
-    @Override
-    public boolean isAccountNonLocked() {
-        return true;
-    }
-
-    @Override
-    public boolean isCredentialsNonExpired() {
-        return true;
-    }
-
-    @Override
-    public boolean isEnabled() {
-        return true;
-    }
 }
