@@ -25,16 +25,19 @@ jobs:
             workdir: Auth/apps
             sonar_key: auth-backend
             dockerfile: Auth/apps/Dockerfile
+            image_name: your-dockerhub-username/auth
           - name: tap
             pom_path: Tap/transport/pom.xml
             workdir: Tap/transport
             sonar_key: tap-backend
             dockerfile: Tap/transport/Dockerfile
+            image_name: your-dockerhub-username/tap
           - name: transitcard
             pom_path: TransitCard/TransitCard/pom.xml
             workdir: TransitCard/TransitCard
             sonar_key: transitcard-backend
             dockerfile: TransitCard/TransitCard/Dockerfile
+            image_name: your-dockerhub-username/transitcard
 
     uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/java-test.yml@main
     with:
@@ -89,8 +92,7 @@ jobs:
     uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/docker-build-push.yml@main
     with:
       project_name: ${{ matrix.svc.name }}
-      # DYNAMIC FIX: Uses your secret username so the push is authorized
-      image_name: ${{ secrets.REGISTRY_USERNAME }}/${{ matrix.svc.name }}
+      image_name: ${{ matrix.svc.image_name }}
       context: ${{ matrix.svc.workdir }}
       dockerfile: ${{ matrix.svc.dockerfile }}
       push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
