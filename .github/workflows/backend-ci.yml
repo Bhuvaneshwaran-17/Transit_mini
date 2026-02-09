@@ -100,4 +100,4 @@ jobs:
       REGISTRY_URL: ${{ secrets.REGISTRY_URL }}
       REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
       REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
-      TEAMS_WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+      TEAMS_WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }} 
