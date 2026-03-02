@@ -87,7 +87,7 @@ jobs:
     needs: build
     permissions:            # <-- add this block
       contents: read        # required for actions/checkout in the called workflow
-      security-events: write# required for uploading SARIF to Code Scanning
+      security-events: write # required for uploading SARIF to Code Scanning
     strategy:
       fail-fast: false
       matrix:
