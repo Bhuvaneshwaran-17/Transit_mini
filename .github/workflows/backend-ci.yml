@@ -85,9 +85,10 @@ jobs:
   docker:
     name: Docker - ${{ matrix.svc.name }}
     needs: build
-    permissions:            # <-- add this block
-      contents: read        # required for actions/checkout in the called workflow
-      security-events: write # required for uploading SARIF to Code Scanning
+    permissions:
+      contents: read
+      security-events: write
+      pull-requests: write # Added this to allow Docker Scout comments
     strategy:
       fail-fast: false
       matrix:
