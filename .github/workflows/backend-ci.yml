@@ -63,7 +63,7 @@ jobs:
       fail-fast: false
       matrix:
         svc: *services
-    uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/sonarqube-analysis.yml@gitops-migration
+    uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/sonarqube-analysis.yml@main
     with:
       java_version: "21"
       pom_path: ${{ matrix.svc.pom_path }}
