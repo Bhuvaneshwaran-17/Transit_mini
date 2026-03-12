@@ -18,6 +18,9 @@ spec:
         image: 172.27.186.119:4510/auth:v1.0.0
         ports:
         - containerPort: 8080
+        env:
+          - name: JWT_SECRET
+            value: "R2FqU2h1ZDQzMWZsa2phc2RmcmtyYWZnYWtqM2FqazNsZmtqMw=="
 ---
 apiVersion: v1
 kind: Service
