@@ -19,8 +19,20 @@ spec:
         ports:
         - containerPort: 8080
         env:
+          - name: SPRING_DATASOURCE_URL
+            value: "jdbc:postgresql://db:5432/postgres"
+          - name: SPRING_DATASOURCE_USERNAME
+            value: "postgres"
           - name: JWT_SECRET
-            value: "R2FqU2h1ZDQzMWZsa2phc2RmcmtyYWZnYWtqM2FqazNsZmtqMw=="
+            valueFrom:
+              secretKeyRef:
+                name: auth-secrets
+                key: JWT_SECRET
+          - name: SPRING_DATASOURCE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: auth-secrets
+                key: DB_PASSWORD
 ---
 apiVersion: v1
 kind: Service
