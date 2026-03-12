@@ -25,7 +25,7 @@ jobs:
           - name: auth
             pom_path: Auth/apps/pom.xml
             workdir: Auth/apps
-            sonar_key: auth-backend
+            sonar_key: apps
             dockerfile: Auth/apps/Dockerfile
             image_name: auth
             manifest: k8s/auth.yaml
@@ -33,7 +33,7 @@ jobs:
           - name: tap
             pom_path: Tap/transport/pom.xml
             workdir: Tap/transport
-            sonar_key: tap-backend
+            sonar_key: transport
             dockerfile: Tap/transport/Dockerfile
             image_name: tap
             manifest: k8s/tap.yaml
@@ -41,7 +41,7 @@ jobs:
           - name: transitcard
             pom_path: TransitCard/TransitCard/pom.xml
             workdir: TransitCard/TransitCard
-            sonar_key: transitcard-backend
+            sonar_key: Transitcard
             dockerfile: TransitCard/TransitCard/Dockerfile
             image_name: transitcard
             manifest: k8s/transitcard.yaml
