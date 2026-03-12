@@ -30,22 +30,6 @@ jobs:
             image_name: auth
             manifest: K8s/auth.yaml         # change to K8s/auth.yaml if your repo uses that case
             regex: "^[[:space:]]*image:[[:space:]]*172\\.27\\.186\\.119:4510\\/auth:"
-          - name: tap
-            pom_path: Tap/transport/pom.xml
-            workdir: Tap/transport
-            sonar_key: transport            # matches existing SonarCloud project
-            dockerfile: Tap/transport/Dockerfile
-            image_name: tap
-            manifest: K8s/tap.yaml
-            regex: "^[[:space:]]*image:[[:space:]]*172\\.27\\.186\\.119:4510\\/tap:"
-          - name: transitcard
-            pom_path: TransitCard/TransitCard/pom.xml
-            workdir: TransitCard/TransitCard
-            sonar_key: TransitCard          # exact case as in SonarCloud
-            dockerfile: TransitCard/TransitCard/Dockerfile
-            image_name: transitcard
-            manifest: K8s/transitcard.yaml
-            regex: "^[[:space:]]*image:[[:space:]]*172\\.27\\.186\\.119:4510\\/transitcard:"
 
     uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/java-test.yml@gitops-migration
     with:
