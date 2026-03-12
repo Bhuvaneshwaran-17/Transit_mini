@@ -28,7 +28,7 @@ jobs:
             sonar_key: apps                 # matches existing SonarCloud project
             dockerfile: Auth/apps/Dockerfile
             image_name: auth
-            manifest: K8s/auth.yaml         # change to K8s/auth.yaml if your repo uses that case
+            manifest: auth.yaml         # change to K8s/auth.yaml if your repo uses that case
             regex: "^[[:space:]]*image:[[:space:]]*172\\.27\\.186\\.119:4510\\/auth:"
 
     uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/java-test.yml@gitops-migration
