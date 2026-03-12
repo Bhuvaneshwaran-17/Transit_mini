@@ -67,6 +67,7 @@ jobs:
     with:
       java_version: "21"
       pom_path: ${{ matrix.svc.pom_path }}
+      workdir: ${{ matrix.svc.workdir }}
       sonar_project_key: ${{ matrix.svc.sonar_key }}
       run_quality_gate: true
     secrets:
