@@ -124,4 +124,4 @@ jobs:
       REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
       REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
       TEAMS_WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
-      LOCAL_ECR_CA: ${{ secrets.LOCAL_ECR_CA }}
+      LOCAL_ECR_CA: ${{ secrets.LOCAL_ECR_CA }} 
