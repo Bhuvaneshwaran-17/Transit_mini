@@ -25,15 +25,15 @@ jobs:
           - name: auth
             pom_path: Auth/apps/pom.xml
             workdir: Auth/apps
-            sonar_key: apps
+            sonar_key: apps                 # matches existing SonarCloud project
             dockerfile: Auth/apps/Dockerfile
             image_name: auth
-            manifest: k8s/auth.yaml
+            manifest: k8s/auth.yaml         # change to K8s/auth.yaml if your repo uses that case
             regex: "^[[:space:]]*image:[[:space:]]*172\\.27\\.186\\.119:4510\\/auth:"
           - name: tap
             pom_path: Tap/transport/pom.xml
             workdir: Tap/transport
-            sonar_key: transport
+            sonar_key: transport            # matches existing SonarCloud project
             dockerfile: Tap/transport/Dockerfile
             image_name: tap
             manifest: k8s/tap.yaml
@@ -41,13 +41,12 @@ jobs:
           - name: transitcard
             pom_path: TransitCard/TransitCard/pom.xml
             workdir: TransitCard/TransitCard
-            sonar_key: TransitCard
+            sonar_key: TransitCard          # exact case as in SonarCloud
             dockerfile: TransitCard/TransitCard/Dockerfile
             image_name: transitcard
             manifest: k8s/transitcard.yaml
             regex: "^[[:space:]]*image:[[:space:]]*172\\.27\\.186\\.119:4510\\/transitcard:"
 
-    # Use the updated reusable TEST workflow from the same branch in the central repo
     uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/java-test.yml@gitops-migration
     with:
       java_version: "21"
@@ -59,7 +58,7 @@ jobs:
   sonar:
     name: Sonar - ${{ matrix.svc.name }}
     needs: test
-    if: ${{ github.ref == 'refs/heads/main' }}
+    if: ${{ github.ref == 'refs/heads/main' }}   # Run Sonar only on main; skip on sub-branch
     strategy:
       fail-fast: false
       matrix:
@@ -68,7 +67,7 @@ jobs:
     with:
       java_version: "21"
       pom_path: ${{ matrix.svc.pom_path }}
-      workdir: ${{ matrix.svc.workdir }}
+      workdir: ${{ matrix.svc.workdir }}         # reusable runs with -f pom.xml in this dir
       sonar_project_key: ${{ matrix.svc.sonar_key }}
       run_quality_gate: true
     secrets:
@@ -79,7 +78,7 @@ jobs:
 
   build:
     name: Build - ${{ matrix.svc.name }}
-    needs: test
+    needs: test                              # build follows test (not sonar)
     strategy:
       fail-fast: false
       matrix:
@@ -102,18 +101,18 @@ jobs:
       pull-requests: write
     strategy:
       fail-fast: false
+      max-parallel: 1                        # single runner → serialize docker jobs (increase later if you add runners)
       matrix:
         svc: *services
 
-    # Use the updated reusable DOCKER+GITOPS workflow from the same branch in central repo
     uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/docker-build-push.yml@gitops-migration
     with:
       project_name: ${{ matrix.svc.name }}
-      image_name: ${{ matrix.svc.image_name }}      # auth/tap/transitcard
+      image_name: ${{ matrix.svc.image_name }}      # auth / tap / transitcard
       context: ${{ matrix.svc.workdir }}
       dockerfile: ${{ matrix.svc.dockerfile }}
 
-      # 🚀 Enable full E2E from branch AND main (build+push+GitOps manifest update)
+      # Build+Push+GitOps update on both main and gitops-migration branches
       push: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/gitops-migration') }}
       update_manifests: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/gitops-migration') }}
 
