@@ -41,7 +41,7 @@ jobs:
           - name: transitcard
             pom_path: TransitCard/TransitCard/pom.xml
             workdir: TransitCard/TransitCard
-            sonar_key: Transitcard
+            sonar_key: TransitCard
             dockerfile: TransitCard/TransitCard/Dockerfile
             image_name: transitcard
             manifest: k8s/transitcard.yaml
