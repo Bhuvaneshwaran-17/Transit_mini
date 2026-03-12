@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: transitcard
+  namespace: apps
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: transitcard
+  template:
+    metadata:
+      labels:
+        app: transitcard
+    spec:
+      containers:
+      - name: transitcard
+        image: 172.27.186.119:4510/transitcard:v1.0.0
+        ports:
+        - containerPort: 8082
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: transitcard
+  namespace: apps
+spec:
+  selector:
+    app: transitcard
+  ports:
+  - port: 80
+    targetPort: 8082
