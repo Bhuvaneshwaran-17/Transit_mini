@@ -3,7 +3,9 @@ name: Backend CI (Monorepo)
 on:
   pull_request:
   push:
-    branches: ["main"]
+    branches:
+      - main
+      - gitops-migration
 
 permissions:
   contents: read
@@ -25,21 +27,28 @@ jobs:
             workdir: Auth/apps
             sonar_key: auth-backend
             dockerfile: Auth/apps/Dockerfile
-            image_name: bhuvi2003/auth
+            image_name: auth
+            manifest: k8s/auth.yaml
+            regex: "^[[:space:]]*image:[[:space:]]*172\\.27\\.186\\.119:4510\\/auth:"
           - name: tap
             pom_path: Tap/transport/pom.xml
             workdir: Tap/transport
             sonar_key: tap-backend
             dockerfile: Tap/transport/Dockerfile
-            image_name: bhuvi2003/tap
+            image_name: tap
+            manifest: k8s/tap.yaml
+            regex: "^[[:space:]]*image:[[:space:]]*172\\.27\\.186\\.119:4510\\/tap:"
           - name: transitcard
             pom_path: TransitCard/TransitCard/pom.xml
             workdir: TransitCard/TransitCard
             sonar_key: transitcard-backend
             dockerfile: TransitCard/TransitCard/Dockerfile
-            image_name: bhuvi2003/transitcard
+            image_name: transitcard
+            manifest: k8s/transitcard.yaml
+            regex: "^[[:space:]]*image:[[:space:]]*172\\.27\\.186\\.119:4510\\/transitcard:"
 
-    uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/java-test.yml@main
+    # Use the updated reusable TEST workflow from the same branch in the central repo
+    uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/java-test.yml@gitops-migration
     with:
       java_version: "21"
       pom_path: ${{ matrix.svc.pom_path }}
@@ -54,7 +63,7 @@ jobs:
       fail-fast: false
       matrix:
         svc: *services
-    uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/sonarqube-analysis.yml@main
+    uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/sonarqube-analysis.yml@gitops-migration
     with:
       java_version: "21"
       pom_path: ${{ matrix.svc.pom_path }}
@@ -73,7 +82,7 @@ jobs:
       fail-fast: false
       matrix:
         svc: *services
-    uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/java-build.yml@main
+    uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/java-build.yml@gitops-migration
     with:
       project_name: ${{ matrix.svc.name }}
       java_version: "21"
@@ -86,22 +95,31 @@ jobs:
     name: Docker - ${{ matrix.svc.name }}
     needs: build
     permissions:
-      contents: read
+      contents: write
       security-events: write
-      pull-requests: write # Added this to allow Docker Scout comments
+      pull-requests: write
     strategy:
       fail-fast: false
       matrix:
         svc: *services
-    uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/docker-build-push.yml@main
+
+    # Use the updated reusable DOCKER+GITOPS workflow from the same branch in central repo
+    uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/docker-build-push.yml@gitops-migration
     with:
       project_name: ${{ matrix.svc.name }}
-      image_name: ${{ matrix.svc.image_name }}
+      image_name: ${{ matrix.svc.image_name }}      # auth/tap/transitcard
       context: ${{ matrix.svc.workdir }}
       dockerfile: ${{ matrix.svc.dockerfile }}
-      push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+      # 🚀 Enable full E2E from branch AND main (build+push+GitOps manifest update)
+      push: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/gitops-migration') }}
+      update_manifests: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/gitops-migration') }}
+
+      manifest_file: ${{ matrix.svc.manifest }}
+      manifest_image_regex: ${{ matrix.svc.regex }}
     secrets:
-      REGISTRY_URL: ${{ secrets.REGISTRY_URL }}
+      REGISTRY_URL: ${{ secrets.REGISTRY_URL }}          # 172.27.186.119:4510
       REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
       REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
       TEAMS_WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+      LOCAL_ECR_CA: ${{ secrets.LOCAL_ECR_CA }}

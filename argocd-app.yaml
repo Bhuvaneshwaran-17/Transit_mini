@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: transit-microservices
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Bhuvaneshwaran-17/Transit_mini
+    targetRevision: gitops-migration   # ← Watch your branch for now
+    path: k8s
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: apps
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
