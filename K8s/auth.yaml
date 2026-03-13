@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: auth
-        image: 172.27.186.119:4510/auth:cf8b5d912fd96d4e6cf1f41b268cf924a38043de
+        image: 172.27.186.119:4510/auth:50ed8e79a71e7e1c3778f9cb0836b64c5cb5094b
         ports:
         - containerPort: 8080
         env:
