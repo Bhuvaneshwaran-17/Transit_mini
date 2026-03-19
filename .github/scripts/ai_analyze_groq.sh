@@ -56,3 +56,4 @@ FINAL_API_RESPONSE=$(analyze_logs "$SUMMARY_INPUT" "$FINAL_SYSTEM_MSG")
 FINAL=$(echo "$FINAL_API_RESPONSE" | jq -r '.choices[0].message.content // "Final analysis failed. Check API response."')
 
 echo "$FINAL" >> "$OUT"
+# Build Timestamp: Thu Mar 19 14:58:40 IST 2026
