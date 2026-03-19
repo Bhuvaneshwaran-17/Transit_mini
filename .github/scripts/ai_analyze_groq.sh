@@ -2,7 +2,7 @@
 set -euo pipefail
 
 : "${GROQ_API_KEY:?GROQ_API_KEY is required in env/secrets}"
-MODEL="${MODEL:-llama3-8b-8192}"
+MODEL="${MODEL:-llama-3.1-8b-instant}"
 OUT="${OUT:-ai_summary.txt}"
 
 echo "===== AI ROOT CAUSE ANALYSIS =====" > "$OUT"
