@@ -12,6 +12,7 @@ permissions:
   packages: write
   security-events: write
   pull-requests: write
+  actions: read # Required to fetch logs via GH CLI
 
 concurrency:
   group: backend-ci-${{ github.ref }}
@@ -111,7 +112,6 @@ jobs:
     name: AI Root-Cause Analysis
     runs-on: [self-hosted, linux, gitrunner]
     needs: [test, sonar, build, docker]
-    # Runs only if any of the preceding jobs failed
     if: ${{ always() && !cancelled() && contains(needs.*.result, 'failure') }}
     outputs:
       summary: ${{ steps.load_rca.outputs.summary }}
@@ -123,8 +123,17 @@ jobs:
       - name: Install kubectl
         uses: azure/setup-kubectl@v3
 
+      - name: Fetch Pipeline Logs (The Truth Source)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "==== FETCHING RUNNER LOGS ====" > maven_output.log
+          # Pulls logs from the specific failed 'test' job across the monorepo
+          gh run view ${{ github.run_id }} --log-failed >> maven_output.log || echo "No failed logs found" >> maven_output.log
+
       - name: Collect and Chunk Logs
         run: |
+          # Now collect_logs.sh will see the maven_output.log we just generated
           bash .github/scripts/collect_logs.sh || true
           bash .github/scripts/chunk_logs.sh || true
 
@@ -137,18 +146,15 @@ jobs:
         id: load_rca
         shell: bash
         run: |
-          # Use -s to check if file exists AND has content
           if [ -s ai_summary.txt ]; then
             echo "AI Summary found. Loading to output."
             {
               echo "summary<<EOF"
               cat ai_summary.txt
-              echo ""
               echo "EOF"
             } >> "$GITHUB_OUTPUT"
           else
-            echo "AI Summary file is missing or empty."
-            echo "summary=AI analysis failed to generate a report. Check the artifacts for details." >> "$GITHUB_OUTPUT"
+            echo "summary=RCA could not identify the specific cause. Check raw logs." >> "$GITHUB_OUTPUT"
           fi
 
       - name: Upload AI RCA artifacts
@@ -164,7 +170,6 @@ jobs:
   notify_failure:
     name: Notify Teams
     needs: ai_log_analysis
-    # always() ensures this runs even if ai_log_analysis was skipped by the engine
     if: |
       always() && 
       needs.ai_log_analysis.result != 'skipped' && 

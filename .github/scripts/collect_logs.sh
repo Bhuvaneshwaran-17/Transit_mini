@@ -2,23 +2,23 @@
 set -euo pipefail
 
 NAMESPACE="${NAMESPACE:-apps}"
-OUTFILE="${OUTFILE:-logs.txt}"
+OUTFILE="logs.txt"
 
-echo "==== POD LIST ====" > "$OUTFILE"
+echo "==== [CRITICAL] CI/CD BUILD LOGS (MAVEN) ====" > "$OUTFILE"
+if [ -f "maven_output.log" ]; then
+    # Grab the last 1000 lines of the actual build failure fetched via GH CLI
+    tail -n 1000 maven_output.log >> "$OUTFILE"
+else
+    echo "No maven_output.log found. Error likely happened at the K8s level." >> "$OUTFILE"
+fi
+
+echo -e "\n==== KUBERNETES POD STATUS ====" >> "$OUTFILE"
 kubectl get pods -n "$NAMESPACE" >> "$OUTFILE" 2>&1 || true
 
-echo -e "\n==== POD LOGS ====" >> "$OUTFILE"
+echo -e "\n==== KUBERNETES POD LOGS (FRESH ONLY) ====" >> "$OUTFILE"
 pods=$(kubectl get pods -n "$NAMESPACE" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || true)
 for p in $pods; do
-  echo -e "\n--- $p ---" >> "$OUTFILE"
-  # Current logs
-  kubectl logs -n "$NAMESPACE" "$p" --tail=2000 >> "$OUTFILE" 2>&1 || true
-  # If in CrashLoopBackOff, try previous container logs too
-  if kubectl get pod -n "$NAMESPACE" "$p" -o jsonpath='{.status.containerStatuses[0].state.waiting.reason}' 2>/dev/null | grep -q 'CrashLoopBackOff'; then
-    echo -e "\n[previous logs]" >> "$OUTFILE"
-    kubectl logs -n "$NAMESPACE" "$p" --previous --tail=2000 >> "$OUTFILE" 2>&1 || true
-  fi
+  echo -e "\n--- Pod: $p ---" >> "$OUTFILE"
+  # --since=5m KILLS THE POSTGRES HALLUCINATION
+  kubectl logs -n "$NAMESPACE" "$p" --tail=500 --since=5m >> "$OUTFILE" 2>&1 || true
 done
-
-echo -e "\n==== EVENTS (sorted) ====" >> "$OUTFILE"
-kubectl get events -n "$NAMESPACE" --sort-by='.metadata.creationTimestamp' >> "$OUTFILE" 2>&1 || true
