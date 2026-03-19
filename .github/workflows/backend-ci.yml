@@ -111,10 +111,8 @@ jobs:
     name: AI Root-Cause Analysis
     runs-on: [self-hosted, linux, gitrunner]
     needs: [test, sonar, build, docker]
-    # EITHER keep your explicit condition:
+    # Runs only if any of the preceding jobs failed
     if: ${{ always() && !cancelled() && contains(needs.*.result, 'failure') }}
-    # OR use the simpler canonical form:
-    # if: failure()
     outputs:
       summary: ${{ steps.load_rca.outputs.summary }}
 
@@ -139,14 +137,18 @@ jobs:
         id: load_rca
         shell: bash
         run: |
-          if [ -f ai_summary.txt ]; then
+          # Use -s to check if file exists AND has content
+          if [ -s ai_summary.txt ]; then
+            echo "AI Summary found. Loading to output."
             {
               echo "summary<<EOF"
               cat ai_summary.txt
+              echo ""
               echo "EOF"
             } >> "$GITHUB_OUTPUT"
           else
-            echo "summary=AI analysis failed to generate a report." >> "$GITHUB_OUTPUT"
+            echo "AI Summary file is missing or empty."
+            echo "summary=AI analysis failed to generate a report. Check the artifacts for details." >> "$GITHUB_OUTPUT"
           fi
 
       - name: Upload AI RCA artifacts
@@ -162,8 +164,11 @@ jobs:
   notify_failure:
     name: Notify Teams
     needs: ai_log_analysis
-    # Run if ai_log_analysis ran (success or failure), skip if it was skipped
-    if: ${{ needs.ai_log_analysis.result == 'success' || needs.ai_log_analysis.result == 'failure' }}
+    # always() ensures this runs even if ai_log_analysis was skipped by the engine
+    if: |
+      always() && 
+      needs.ai_log_analysis.result != 'skipped' && 
+      needs.ai_log_analysis.result != 'cancelled'
     uses: Bhuvaneshwaran-17/central-devops-tooling/.github/workflows/teams-notifier.yml@main
     with:
       project_name: ${{ github.repository }}
@@ -171,6 +176,5 @@ jobs:
       job_name: "Pipeline Failure Analysis"
       status: "failure"
       rca: ${{ needs.ai_log_analysis.outputs.summary }}
-    # If the central repo owns WEBHOOK_URL internally, you can remove this mapping:
     secrets:
       WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
