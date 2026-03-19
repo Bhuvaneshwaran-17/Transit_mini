@@ -33,7 +33,6 @@ jobs:
             image_name: auth
             manifest: auth.yaml
             regex: "image:.*/auth:"
-
     uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/java-test.yml@gitops-migration
     with:
       java_version: "21"
@@ -112,7 +111,6 @@ jobs:
     name: AI Root-Cause Analysis
     runs-on: ubuntu-latest
     needs: [test, sonar, build, docker]
-    # This logic ensures the job runs if any of the above fails, even if some were skipped.
     if: >
       always() && 
       !cancelled() && 
@@ -143,7 +141,6 @@ jobs:
         id: load_rca
         shell: bash
         run: |
-          # Use a heredoc to handle multi-line AI summaries safely for GitHub Outputs
           if [ -f ai_summary.txt ]; then
             echo "summary<<EOF" >> $GITHUB_OUTPUT
             cat ai_summary.txt >> $GITHUB_OUTPUT
@@ -153,7 +150,6 @@ jobs:
           fi
 
       - name: Centralized Teams Notifier (AI RCA)
-        # Note: Using the specific repo and branch where your Notifier lives
         uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/notify.yml@gitops-migration
         with:
           project_name: ${{ github.repository }}
