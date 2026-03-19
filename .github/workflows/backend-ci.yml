@@ -8,14 +8,17 @@ on:
       - gitops-migration
 
 permissions:
-  contents: read
+  contents: write
   packages: write
+  security-events: write
+  pull-requests: write
 
 concurrency:
   group: backend-ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # --- Stage 1: Testing ---
   test:
     name: Test - ${{ matrix.svc.name }}
     strategy:
@@ -25,11 +28,11 @@ jobs:
           - name: auth
             pom_path: Auth/apps/pom.xml
             workdir: Auth/apps
-            sonar_key: apps                 # matches existing SonarCloud project
+            sonar_key: apps
             dockerfile: Auth/apps/Dockerfile
             image_name: auth
-            manifest: auth.yaml         # change to K8s/auth.yaml if your repo uses that case
-            regex: "image:.*\\/auth:"
+            manifest: auth.yaml
+            regex: "image:.*/auth:"
 
     uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/java-test.yml@gitops-migration
     with:
@@ -39,10 +42,11 @@ jobs:
     secrets:
       TEAMS_WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
 
+  # --- Stage 2: Quality (Only on Main) ---
   sonar:
     name: Sonar - ${{ matrix.svc.name }}
     needs: test
-    if: ${{ github.ref == 'refs/heads/main' }}   # Run Sonar only on main; skip on sub-branch
+    if: github.ref == 'refs/heads/main'
     strategy:
       fail-fast: false
       matrix:
@@ -51,7 +55,7 @@ jobs:
     with:
       java_version: "21"
       pom_path: ${{ matrix.svc.pom_path }}
-      workdir: ${{ matrix.svc.workdir }}         # reusable runs with -f pom.xml in this dir
+      workdir: ${{ matrix.svc.workdir }}
       sonar_project_key: ${{ matrix.svc.sonar_key }}
       run_quality_gate: true
     secrets:
@@ -60,9 +64,10 @@ jobs:
       SONAR_ORG_KEY: ${{ secrets.SONAR_ORG_KEY }}
       TEAMS_WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
 
+  # --- Stage 3: Build Artifacts ---
   build:
     name: Build - ${{ matrix.svc.name }}
-    needs: test                              # build follows test (not sonar)
+    needs: test
     strategy:
       fail-fast: false
       matrix:
@@ -76,35 +81,94 @@ jobs:
     secrets:
       TEAMS_WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
 
+  # --- Stage 4: Docker & GitOps ---
   docker:
     name: Docker - ${{ matrix.svc.name }}
     needs: build
-    permissions:
-      contents: write
-      security-events: write
-      pull-requests: write
     strategy:
       fail-fast: false
-      max-parallel: 1                        # single runner → serialize docker jobs (increase later if you add runners)
+      max-parallel: 1
       matrix:
         svc: *services
-
     uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/docker-build-push.yml@gitops-migration
     with:
       project_name: ${{ matrix.svc.name }}
-      image_name: ${{ matrix.svc.image_name }}      # auth / tap / transitcard
+      image_name: ${{ matrix.svc.image_name }}
       context: ${{ matrix.svc.workdir }}
       dockerfile: ${{ matrix.svc.dockerfile }}
-
-      # Build+Push+GitOps update on both main and gitops-migration branches
       push: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/gitops-migration') }}
       update_manifests: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/gitops-migration') }}
-
       manifest_file: ${{ matrix.svc.manifest }}
       manifest_image_regex: ${{ matrix.svc.regex }}
     secrets:
-      REGISTRY_URL: ${{ secrets.REGISTRY_URL }}          # 172.27.186.119:4510
+      REGISTRY_URL: ${{ secrets.REGISTRY_URL }}
       REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
       REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
       TEAMS_WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
-      LOCAL_ECR_CA: ${{ secrets.LOCAL_ECR_CA }} 
+      LOCAL_ECR_CA: ${{ secrets.LOCAL_ECR_CA }}
+
+  # --- Stage 5: AI RCA (Only on Failure) ---
+  ai_log_analysis:
+    name: AI Root-Cause Analysis
+    runs-on: ubuntu-latest
+    needs: [test, sonar, build, docker]
+    # This logic ensures the job runs if any of the above fails, even if some were skipped.
+    if: >
+      always() && 
+      !cancelled() && 
+      contains(needs.*.result, 'failure')
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Collect Kubernetes Logs
+        run: bash .github/scripts/collect_logs.sh
+        continue-on-error: true
+
+      - name: Chunk logs
+        run: bash .github/scripts/chunk_logs.sh
+        continue-on-error: true
+
+      - name: Analyze with Groq AI
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: bash .github/scripts/ai_analyze_groq.sh
+        continue-on-error: true
+
+      - name: Load AI Summary for Notification
+        id: load_rca
+        shell: bash
+        run: |
+          # Use a heredoc to handle multi-line AI summaries safely for GitHub Outputs
+          if [ -f ai_summary.txt ]; then
+            echo "summary<<EOF" >> $GITHUB_OUTPUT
+            cat ai_summary.txt >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "summary=AI analysis failed to generate a report." >> $GITHUB_OUTPUT
+          fi
+
+      - name: Centralized Teams Notifier (AI RCA)
+        # Note: Using the specific repo and branch where your Notifier lives
+        uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/notify.yml@gitops-migration
+        with:
+          project_name: ${{ github.repository }}
+          component_name: "auth"
+          job_name: "Pipeline Failure Analysis"
+          status: "failure"
+          rca: ${{ steps.load_rca.outputs.summary }}
+        secrets:
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+
+      - name: Upload AI RCA artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-rca
+          path: |
+            ai_summary.txt
+            logs.txt
