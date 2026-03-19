@@ -164,7 +164,7 @@ jobs:
     needs: ai_log_analysis
     # Run if ai_log_analysis ran (success or failure), skip if it was skipped
     if: ${{ needs.ai_log_analysis.result == 'success' || needs.ai_log_analysis.result == 'failure' }}
-    uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/notify.yml@gitops-migration
+    uses: Bhuvaneshwaran-17/central-devops-tooling/.github/workflows/teams-notifier.yml@main
     with:
       project_name: ${{ github.repository }}
       component_name: "auth"
