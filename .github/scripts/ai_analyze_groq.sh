@@ -14,13 +14,20 @@ if [ ! -s logs.txt ]; then
     exit 0
 fi
 
-# 2. ARCHITECT-LEVEL TRIMMING (Stay under 6,000 tokens)
-# - Ignore [INFO] noise
-# - Keep only lines containing 'Error', 'Failure', or '[ERROR]'
-# - Grab last 100 lines
-# - Limit line length to 200 chars to avoid token bloat
-# - Hard cap at 5,000 characters (approx 1,200 tokens)
-CLEAN_LOGS=$(grep -v "\[INFO\]" logs.txt | tail -n 200 | tr -d '\000-\031' | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | head -c 5500)
+# STEP 2: ARCHITECT'S PRECISION FILTER
+# 1. Look for the "COMPILATION ERROR" marker and grab 20 lines after it.
+# 2. Also grab the "BUILD FAILURE" summary.
+# 3. This ensures the AI ONLY sees the 'Alphabet Error' and NOT the Hibernate noise.
+ERROR_ZONE=$(grep -A 20 "COMPILATION ERROR" logs.txt)
+SUMMARY_ZONE=$(grep -A 10 "BUILD FAILURE" logs.txt)
+
+# Combine them and sanitize
+CLEAN_LOGS=$(echo -e "$ERROR_ZONE\n$SUMMARY_ZONE" | tr -d '\000-\031' | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | head -c 4000)
+
+# IF THE LOGS ARE EMPTY (No compilation error found), fallback to the last 50 lines
+if [ -z "$ERROR_ZONE" ]; then
+    CLEAN_LOGS=$(tail -n 50 logs.txt | tr -d '\000-\031' | sed 's/\\/\\\\/g' | sed 's/"/\\"/g')
+fi
 
 # 3. LOCKDOWN PROMPT
 SYSTEM_MSG="You are a Senior SRE.
