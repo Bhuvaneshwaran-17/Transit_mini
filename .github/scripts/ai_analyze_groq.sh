@@ -1,57 +1,57 @@
 #!/usr/bin/env bash
 
-# Use Python to build the JSON payload since jq is missing
-# Temperature 0.0 makes the AI factual and prevents 'creative' guessing
+# Use Python to build the JSON payload securely
+# Temperature 0.0 forces the AI to be a literal log-reader
 generate_payload() {
     python3 -c "import json, sys; print(json.dumps({'model': '$1', 'messages': [{'role': 'system', 'content': sys.argv[1]}, {'role': 'user', 'content': sys.argv[2]}], 'temperature': 0.0}))" "$2" "$3"
 }
 
 OUT="ai_summary.txt"
-echo "===== AI ROOT CAUSE ANALYSIS =====" > "$OUT"
+echo "===== AI ROOT CAUSE ANALYSIS (SINGLE-SHOT) =====" > "$OUT"
 
-# STEP 1: VERIFY DATA PROVENANCE
-# If logs.txt doesn't exist or is basically empty, stop immediately.
-if [ ! -s logs.txt ] || [ $(wc -l < logs.txt) -lt 5 ]; then
-    echo "CRITICAL ERROR: No log data collected. Check 'maven_output.log' artifact." >> "$OUT"
-    echo "RCA Status: Failed due to missing evidence."
+# STEP 1: VERIFY DATA PRESENCE
+if [ ! -s logs.txt ]; then
+    echo "CRITICAL ERROR: logs.txt is missing or empty. No evidence to analyze." >> "$OUT"
     exit 0
 fi
+
+# STEP 2: SANITIZE LOGS (The "Payload Fixer")
+# This removes special characters and backslashes that cause 'AI could not parse' errors
+CLEAN_LOGS=$(cat logs.txt | tr -d '\000-\031' | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | tail -n 2000)
 
 # THE ARCHITECT'S LOCKDOWN PROMPT
 SYSTEM_MSG="You are a Senior DevOps Architect.
 STRICT RULES:
-1. ONLY analyze the text provided. Do NOT use outside knowledge.
-2. If you see 'COMPILATION ERROR' or 'ERROR: <identifier> expected', identify the EXACT file and line number.
-3. If the logs are empty or irrelevant, respond ONLY with 'INSUFFICIENT DATA'.
-4. DO NOT mention Hibernate, PostgreSQL, or Dialects unless they appear in the CURRENT text.
-5. Be brutal, direct, and name the 'Smoking Gun' (the primary error)."
+1. LOOK AT 'CI/CD BUILD LOGS' FIRST.
+2. If you see 'COMPILATION ERROR' or 'ERROR: <identifier> expected', that is the ONLY ROOT CAUSE.
+3. DO NOT mention Hibernate, PostgreSQL, or Dialects if there is a Java syntax error in the build section.
+4. Identify the EXACT file and line number (e.g., AuthController.java:21).
+5. Be brutal, direct, and ignore stale Kubernetes logs if the build failed."
 
-# Iterate through the chunks created by chunk_logs.sh
-for f in chunk_*; do
-    [ -f "$f" ] || continue
+echo "Sending full logs to Groq AI..."
 
-    # Skip chunks that are effectively empty to save API quota
-    if [ ! -s "$f" ]; then continue; fi
+# STEP 3: EXECUTE SINGLE API CALL
+PAYLOAD=$(generate_payload "llama-3.1-8b-instant" "$SYSTEM_MSG" "$CLEAN_LOGS")
 
-    echo "Analyzing $f..."
-    CONTENT=$(cat "$f")
+RESPONSE=$(curl -k -sS https://api.groq.com/openai/v1/chat/completions \
+    -H "Authorization: Bearer $GROQ_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d "$PAYLOAD")
 
-    PAYLOAD=$(generate_payload "llama-3.1-8b-instant" "$SYSTEM_MSG" "$CONTENT")
+# STEP 4: EXTRACT AND VALIDATE
+RESULT=$(echo "$RESPONSE" | python3 -c "import json, sys;
+try:
+    data=json.load(sys.stdin)
+    if 'choices' in data:
+        print(data['choices'][0]['message']['content'])
+    else:
+        print('ERROR: Groq API Error - ' + str(data.get('error', 'Unknown Error')))
+except Exception as e:
+    print('ERROR: Failed to parse JSON response from AI.')
+")
 
-    # Using -k to bypass SSL issues on Windows/WSL environments
-    RESPONSE=$(curl -k -sS https://api.groq.com/openai/v1/chat/completions \
-        -H "Authorization: Bearer $GROQ_API_KEY" \
-        -H "Content-Type: application/json" \
-        -d "$PAYLOAD")
+echo -e "\n$RESULT" >> "$OUT"
 
-    # Extract content using Python (Safe extraction)
-    RESULT=$(echo "$RESPONSE" | python3 -c "import json, sys; data=json.load(sys.stdin); print(data['choices'][0]['message']['content']) if 'choices' in data and data['choices'] else print('ERROR: AI could not parse this chunk or API limit hit.')")
-
-    # Append to summary only if it's not 'INSUFFICIENT DATA'
-    if [[ "$RESULT" != *"INSUFFICIENT DATA"* ]]; then
-        echo -e "\n--- Evidence in $f ---\n$RESULT" >> "$OUT"
-    fi
-
-    # Protect Groq Free Tier Rate Limits
-    sleep 10
-done
+# STEP 5: CLEANUP
+# Keep logs.txt for debugging but the AI logic is done.
+echo "Analysis complete. Results in $OUT"
