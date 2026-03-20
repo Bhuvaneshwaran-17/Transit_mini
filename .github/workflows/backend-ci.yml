@@ -110,7 +110,7 @@ jobs:
   # --- Stage 5: AI RCA Analysis ---
   ai_log_analysis:
     name: AI Root-Cause Analysis
-    runs-on: [self-hosted, linux, gitrunner]
+    runs-on: [self-hosted, linux]
     needs: [test, sonar, build, docker]
     if: ${{ always() && !cancelled() && contains(needs.*.result, 'failure') }}
     outputs:
