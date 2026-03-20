@@ -20,7 +20,7 @@ fi
 # - Grab last 100 lines
 # - Limit line length to 200 chars to avoid token bloat
 # - Hard cap at 5,000 characters (approx 1,200 tokens)
-CLEAN_LOGS=$(grep -Ei "Error|Failure|\[ERROR\]" logs.txt | tail -n 100 | cut -c 1-200 | tr -d '\000-\031' | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | head -c 5000)
+CLEAN_LOGS=$(grep -v "\[INFO\]" logs.txt | tail -n 200 | tr -d '\000-\031' | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | head -c 5500)
 
 # 3. LOCKDOWN PROMPT
 SYSTEM_MSG="You are a Senior SRE.
