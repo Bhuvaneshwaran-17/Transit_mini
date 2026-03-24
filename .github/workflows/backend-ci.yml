@@ -107,12 +107,53 @@ jobs:
       TEAMS_WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
       LOCAL_ECR_CA: ${{ secrets.LOCAL_ECR_CA }}
 
-  # --- Stage 5: AI RCA Analysis ---
-  ai_log_analysis:
-    name: AI Root-Cause Analysis
+  # --- Stage 5: Log Collection ---
+  collect_logs:
+    name: Collect Pipeline Logs
     runs-on: [ self-hosted, linux ]
     needs: [ test, sonar, build, docker ]
-    if: ${{ always() && !cancelled() && contains(needs.*.result, 'failure') }}
+    if: |
+      always() && !cancelled() &&
+      (needs.test.result == 'failure' || needs.build.result == 'failure' ||
+       needs.docker.result == 'failure' || needs.sonar.result == 'failure')
+
+    steps:
+      - name: Fetch Pipeline Logs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # All upstream jobs are done because of 'needs'.
+          # Wait 10s for GitHub to finalize log files.
+          echo "Waiting 10s for GitHub to finalize logs..."
+          sleep 10
+
+          # 1. Fetch failed job logs specifically
+          echo "Fetching failed job logs..."
+          gh run view ${{ github.run_id }} --log-failed > maven_output.log 2>&1 || true
+
+          # 2. FALLBACK: If still empty, pull the full run log
+          if [ ! -s maven_output.log ]; then
+            echo "Failed log fetch empty. Pulling full run log..."
+            gh run view ${{ github.run_id }} --log > maven_output.log 2>&1 || true
+          fi
+
+          # 3. VERIFICATION
+          echo "Log file size: $(wc -c < maven_output.log) bytes"
+          head -n 20 maven_output.log
+
+      - name: Upload Logs Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-logs
+          path: maven_output.log
+          retention-days: 1
+
+  # --- Stage 6: AI RCA Analysis ---
+  ai_analysis:
+    name: AI Root-Cause Analysis
+    runs-on: [ self-hosted, linux ]
+    needs: collect_logs
+    if: ${{ always() && needs.collect_logs.result == 'success' }}
     outputs:
       summary: ${{ steps.load_rca.outputs.summary }}
 
@@ -120,49 +161,21 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Fetch Pipeline Logs
+      - name: Download Logs Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: pipeline-logs
+
+      - name: Run AI RCA with Copilot
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          # 1. Wait for all other jobs to complete before fetching logs
-          echo "Waiting for run to complete..."
-          for i in $(seq 1 20); do
-            STATUS=$(gh run view ${{ github.run_id }} --json status -q '.status')
-            echo "Attempt $i: Run status = $STATUS"
-            if [ "$STATUS" = "completed" ]; then
-              echo "Run is complete. Fetching logs..."
-              break
-            fi
-            echo "Still in progress. Waiting 15 seconds..."
-            sleep 15
-          done
-
-          # 2. Fetch failed logs specifically
-          gh run view ${{ github.run_id }} --log-failed > maven_output.log 2>&1 || true
-
-          # 3. EMERGENCY FALLBACK: If maven_output.log is still empty, pull the WHOLE log
-          if [ ! -s maven_output.log ]; then
-            echo "Failed log fetch empty. Pulling full run log..."
-            gh run view ${{ github.run_id }} --log > maven_output.log 2>&1 || true
-          fi
-
-          # 4. VERIFICATION (This will show up in your GitHub Action console)
-          echo "Log file size: $(wc -c < maven_output.log) bytes"
-          head -n 20 maven_output.log
-
-      - name: AI RCA with Copilot
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # Use the strict Copilot script
-          bash .github/scripts/ai_analyze.sh
+        run: bash .github/scripts/ai_analyze.sh
 
       - name: Load AI Summary
         id: load_rca
         shell: bash
         run: |
           if [ -s ai_summary.txt ]; then
-            # CRITICAL: Strip ANSI color codes that break Teams/GitHub outputs
             sed -i 's/\x1b\[[0-9;]*m//g' ai_summary.txt
             echo "AI Summary found. Loading to output."
             {
@@ -174,7 +187,7 @@ jobs:
             echo "summary=RCA could not identify the specific cause. Check raw logs." >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Upload AI RCA artifacts
+      - name: Upload AI RCA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ai-rca
@@ -182,20 +195,20 @@ jobs:
             ai_summary.txt
             maven_output.log
 
-  # --- Stage 6: Centralized Notification ---
+  # --- Stage 7: Centralized Notification ---
   notify_failure:
     name: Notify Teams
-    needs: ai_log_analysis
+    needs: ai_analysis
     if: |
-      always() && 
-      needs.ai_log_analysis.result != 'skipped' && 
-      needs.ai_log_analysis.result != 'cancelled'
+      always() &&
+      needs.ai_analysis.result != 'skipped' &&
+      needs.ai_analysis.result != 'cancelled'
     uses: Bhuvaneshwaran-17/central-devops-tooling/.github/workflows/teams-notifier.yml@main
     with:
       project_name: ${{ github.repository }}
       component_name: "auth"
       job_name: "Pipeline Failure Analysis"
       status: "failure"
-      rca: ${{ needs.ai_log_analysis.outputs.summary }}
+      rca: ${{ needs.ai_analysis.outputs.summary }}
     secrets:
       WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}

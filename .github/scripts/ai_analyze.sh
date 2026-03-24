@@ -26,16 +26,25 @@ fi
 # 3. EXECUTE VIA COPILOT
 echo "Consulting Copilot for Root Cause..." >> "$OUT"
 
-PROMPT="[STRICT RCA MODE] You are a Senior DevOps Architect. Analyze the following Maven logs for the 'auth' service.
+# Write prompt + logs to a temp file to avoid shell argument corruption
+# Maven logs contain special chars ([, ], <, >, `) that break inline string args
+TMP_PROMPT=$(mktemp)
+cat > "$TMP_PROMPT" <<'PROMPT_EOF'
+[STRICT RCA MODE] You are a Senior DevOps Architect. Analyze the following Maven logs for the 'auth' service.
 1. Identify the exact Error Type.
 2. Provide the File Path and Line Number.
 3. Provide a concise Code Fix.
-Format the response as a clean 3-bullet list. Do NOT include conversational filler."
+Format the response as a clean 3-bullet list. Do NOT include conversational filler.
+PROMPT_EOF
+
+echo "" >> "$TMP_PROMPT"
+echo "$CLEAN_LOGS" >> "$TMP_PROMPT"
 
 # GH_PROMPT_DISABLED=1 forces non-interactive mode on the runner (no TTY)
-GH_PROMPT_DISABLED=1 gh copilot explain "$PROMPT
+GH_PROMPT_DISABLED=1 gh copilot explain "$(cat "$TMP_PROMPT")" >> "$OUT" 2>&1
 
-$CLEAN_LOGS" >> "$OUT" 2>&1
+# Cleanup temp file
+rm -f "$TMP_PROMPT"
 
 # Strip ANSI color codes from Copilot output
 sed -i 's/\x1b\[[0-9;]*m//g' "$OUT"
