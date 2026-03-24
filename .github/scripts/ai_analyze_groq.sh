@@ -1,62 +1,45 @@
 #!/usr/bin/env bash
 
-# Secure JSON payload generator
-generate_payload() {
-    python3 -c "import json, sys; print(json.dumps({'model': '$1', 'messages': [{'role': 'system', 'content': sys.argv[1]}, {'role': 'user', 'content': sys.argv[2]}], 'temperature': 0.0}))" "$2" "$3"
-}
+# File: .github/scripts/ai_analyze.sh
+# Purpose: AI Root Cause Analysis using Native GitHub Copilot CLI
 
 OUT="ai_summary.txt"
-echo "===== AI ROOT CAUSE ANALYSIS (SURGICAL) =====" > "$OUT"
+echo "===== AI ROOT CAUSE ANALYSIS (COPILOT-POWERED) =====" > "$OUT"
 
-# 1. VERIFY DATA
-if [ ! -s logs.txt ]; then
-    echo "CRITICAL ERROR: logs.txt is empty. Check your artifact download step." >> "$OUT"
-    exit 0
+# 1. VERIFY DATA (SRE Guardrail)
+# Ensure the logs were actually downloaded from the artifact step
+if [ ! -f logs.txt ] || [ ! -s logs.txt ]; then
+    echo "CRITICAL ERROR: logs.txt is empty or missing." >> "$OUT"
+    echo "Check the 'gh run download' step in your workflow." >> "$OUT"
+    exit 1
 fi
 
-# STEP 2: ARCHITECT'S PRECISION FILTER
-# 1. Look for the "COMPILATION ERROR" marker and grab 20 lines after it.
-# 2. Also grab the "BUILD FAILURE" summary.
-# 3. This ensures the AI ONLY sees the 'Alphabet Error' and NOT the Hibernate noise.
-ERROR_ZONE=$(grep -A 20 "COMPILATION ERROR" logs.txt)
-SUMMARY_ZONE=$(grep -A 10 "BUILD FAILURE" logs.txt)
+# 2. SURGICAL LOG CAPTURE
+# We extract the 'COMPILATION ERROR' block + 25 lines of context
+# This keeps the prompt clean and avoids Hibernate/JDBC noise
+ERROR_ZONE=$(grep -C 25 "COMPILATION ERROR" logs.txt)
 
-# Combine them and sanitize
-CLEAN_LOGS=$(echo -e "$ERROR_ZONE\n$SUMMARY_ZONE" | tr -d '\000-\031' | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | head -c 4000)
-
-# IF THE LOGS ARE EMPTY (No compilation error found), fallback to the last 50 lines
 if [ -z "$ERROR_ZONE" ]; then
-    CLEAN_LOGS=$(tail -n 50 logs.txt | tr -d '\000-\031' | sed 's/\\/\\\\/g' | sed 's/"/\\"/g')
+    # Fallback: If no compilation error, take the last 100 lines for a general failure
+    CLEAN_LOGS=$(tail -n 100 logs.txt)
+    echo "[INFO] No compilation marker found. Analyzing tail logs..." >> "$OUT"
+else
+    CLEAN_LOGS="$ERROR_ZONE"
 fi
 
-# 3. LOCKDOWN PROMPT
-SYSTEM_MSG="You are a Senior SRE.
-1. Identify the EXACT file and line number of the COMPILATION ERROR.
-2. Ignore database/hibernate issues if a Java syntax error exists.
-3. Be brief. Maximum 3 bullet points."
+# 3. EXECUTE VIA NATIVE COPILOT
+# We pipe the logs directly into 'gh copilot explain'
+# The --prompt-file or -p flag is used for the instruction
+echo "Consulting Copilot for Root Cause..."
 
-echo "Sending surgical logs to Groq (Tokens: ~1500/6000)..."
+PROMPT="Analyze these Maven build logs.
+1. Identify the EXACT file and line number of the failure.
+2. Explain why the build failed (e.g., Syntax Error, Missing Dependency).
+3. Ignore all database, Hibernate, and JDBC connection noise.
+4. Be brief. Maximum 3 bullet points."
 
-# 4. EXECUTE
-PAYLOAD=$(generate_payload "llama-3.1-8b-instant" "$SYSTEM_MSG" "$CLEAN_LOGS")
+echo "$CLEAN_LOGS" | gh copilot explain "$PROMPT" >> "$OUT"
 
-RESPONSE=$(curl -k -sS https://api.groq.com/openai/v1/chat/completions \
-    -H "Authorization: Bearer $GROQ_API_KEY" \
-    -H "Content-Type: application/json" \
-    -d "$PAYLOAD")
-
-# 5. PARSE RESPONSE
-RESULT=$(echo "$RESPONSE" | python3 -c "import json, sys;
-try:
-    data=json.load(sys.stdin)
-    if 'choices' in data:
-        print(data['choices'][0]['message']['content'])
-    else:
-        # Prints the actual Groq error if limit hit
-        print('GROQ API REJECTION: ' + str(data.get('error', {}).get('message', 'Unknown Error')))
-except:
-    print('ERROR: Response was not valid JSON.')
-")
-
-echo -e "\n$RESULT" >> "$OUT"
+# 4. FINAL VERDICT
+echo -e "\n--------------------------------------------" >> "$OUT"
 echo "Analysis complete. Output saved to $OUT"
