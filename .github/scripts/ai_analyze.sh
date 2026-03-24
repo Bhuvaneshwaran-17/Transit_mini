@@ -40,8 +40,8 @@ PROMPT_EOF
 echo "" >> "$TMP_PROMPT"
 echo "$CLEAN_LOGS" >> "$TMP_PROMPT"
 
-# GH_PROMPT_DISABLED=1 forces non-interactive mode on the runner (no TTY)
-GH_PROMPT_DISABLED=1 gh copilot explain "$(cat "$TMP_PROMPT")" >> "$OUT" 2>&1
+# -p flag on 'gh copilot explain' runs it non-interactively
+gh copilot explain -p "$(cat "$TMP_PROMPT")" >> "$OUT" 2>&1
 
 # Cleanup temp file
 rm -f "$TMP_PROMPT"
