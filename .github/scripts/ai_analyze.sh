@@ -25,9 +25,15 @@ else
 fi
 
 # 3. EXECUTE VIA NATIVE COPILOT
-PROMPT="[RCA MODE] Analyze the provided text ONLY. Do NOT use external tools or scan the filesystem. Identify the Maven/Java build failure for the 'auth' service. Provide a 3-bullet point RCA: Error Type, File:Line, and Recommended Fix."
+echo "Consulting Copilot for Root Cause..." >> "$OUT"
 
-# Pipe data to Copilot
-echo "$CLEAN_LOGS" | gh copilot -p "$PROMPT" >> "$OUT" 2>&1
+PROMPT="[RCA MODE] Analyze the provided text ONLY. Identify the Maven/Java build failure for the 'auth' service. Provide a 3-bullet point RCA: Error Type, File:Line, and Recommended Fix."
+
+# THE CRITICAL CHANGE:
+# 1. Use 'explain' if 'gh copilot -p' is hanging.
+# 2. Add '2>&1' to catch errors.
+# 3. Ensure we are using the right model via the CLI config.
+
+echo "$CLEAN_LOGS" | gh copilot explain "Analyze these logs: $PROMPT" >> "$OUT" 2>&1
 
 echo -e "\n--------------------------------------------" >> "$OUT"
