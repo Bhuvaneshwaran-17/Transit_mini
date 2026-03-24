@@ -4,7 +4,7 @@
 OUT="ai_summary.txt"
 LOG_FILE="maven_output.log"
 
-echo "===== AI ROOT CAUSE ANALYSIS (CLAUDE-POWERED) =====" > "$OUT"
+echo "===== AI ROOT CAUSE ANALYSIS (COPILOT-POWERED) =====" > "$OUT"
 
 # 1. VERIFY DATA
 if [ ! -f "$LOG_FILE" ] || [ ! -s "$LOG_FILE" ]; then
@@ -12,33 +12,38 @@ if [ ! -f "$LOG_FILE" ] || [ ! -s "$LOG_FILE" ]; then
     exit 1
 fi
 
-# 2. SURGICAL LOG CAPTURE
-# Capture the compilation error specifically
-ERROR_ZONE=$(grep -iE -C 50 "COMPILATION ERROR|Compilation failure|BUILD FAILURE|ERROR" "$LOG_FILE" | head -n 300)
+# 2. SURGICAL LOG CAPTURE (Extraction logic)
+ERROR_ZONE=$(grep -iE -C 20 "COMPILATION ERROR|Compilation failure|BUILD FAILURE|ERROR" "$LOG_FILE" | head -n 100)
+CLEAN_LOGS="${ERROR_ZONE:-$(tail -n 100 "$LOG_FILE")}"
 
-if [ -z "$ERROR_ZONE" ]; then
-    CLEAN_LOGS=$(tail -n 250 "$LOG_FILE")
-    echo "[WARNING] Sending raw tail logs..." >> "$OUT"
+# 3. EXECUTE VIA GITHUB COPILOT API (The Stable Way)
+echo "Consulting Copilot API for Root Cause..." >> "$OUT"
+
+# We use the GH_TOKEN you added to your secrets
+# The prompt is structured for a 3-bullet response
+RESPONSE=$(curl -s -X POST "https://api.github.com/copilot/chat/completions" \
+  -H "Authorization: Bearer $GH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"model\": \"gpt-4o\",
+    \"messages\": [
+      {
+        \"role\": \"system\",
+        \"content\": \"You are a DevOps Architect. Provide a 3-bullet RCA: 1. Error Type, 2. File:Line, 3. Suggested Fix.\"
+      },
+      {
+        \"role\": \"user\",
+        \"content\": \"Analyze these Maven logs: $CLEAN_LOGS\"
+      }
+    ]
+  }")
+
+# 4. EXTRACT CONTENT (Parsing the JSON response)
+# We use 'jq' if available, otherwise raw sed to pull the message content
+if command -v jq >/dev/null 2>&1; then
+    echo "$RESPONSE" | jq -r '.choices[0].message.content' >> "$OUT"
 else
-    CLEAN_LOGS="$ERROR_ZONE"
-    echo "[SUCCESS] Found error markers. Analyzing with Claude..." >> "$OUT"
-fi
-
-# 3. EXECUTE VIA NATIVE COPILOT (The CLI-Suggested Syntax)
-echo "Consulting Copilot for Root Cause..." >> "$OUT"
-
-# 1. We combine the Instruction and the Logs into one variable.
-# 2. We use the root 'gh copilot' command with -p.
-# 3. We QUOTE the entire prompt to satisfy the CLI's picky parser.
-
-FULL_PROMPT="[RCA MODE] Analyze these Maven logs: $CLEAN_LOGS. Provide a 3-bullet RCA: Error, File:Line, and Fix."
-
-gh copilot -p "$FULL_PROMPT" >> "$OUT" 2>&1
-
-# 4. SAFETY CHECK: If it still returns 'Invalid command', we use the -i flag as a last resort.
-if grep -q "Invalid command format" "$OUT"; then
-    echo "Falling back to interactive-bypass mode..." >> "$OUT"
-    gh copilot -i "explain -p '$FULL_PROMPT'" >> "$OUT" 2>&1
+    echo "$RESPONSE" | sed -n 's/.*"content": "\(.*\)".*/\1/p' >> "$OUT"
 fi
 
 echo -e "\n--------------------------------------------" >> "$OUT"

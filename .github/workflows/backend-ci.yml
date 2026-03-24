@@ -154,7 +154,7 @@ jobs:
 
       - name: Run AI RCA with Copilot
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.MY_PERSONAL_TOKEN }}
         run: bash .github/scripts/ai_analyze.sh
 
       - name: Load AI Summary
