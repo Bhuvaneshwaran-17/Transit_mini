@@ -16,13 +16,13 @@ fi
 ERROR_ZONE=$(grep -iE -C 20 "COMPILATION ERROR|Compilation failure|BUILD FAILURE|ERROR" "$LOG_FILE" | head -n 100)
 CLEAN_LOGS="${ERROR_ZONE:-$(tail -n 100 "$LOG_FILE")}"
 
-# 3. EXECUTE VIA GITHUB COPILOT API (With Debugging)
-echo "Consulting Copilot API..." >> "$OUT"
+# 3. UPDATED EXECUTE VIA GITHUB COPILOT PROXY
+echo "Consulting Copilot API (Proxy Mode)..." >> "$OUT"
 
-# Store the HTTP status code and the response body
-RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://api.github.com/copilot/chat/completions" \
+RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://api.githubcopilot.com/chat/completions" \
   -H "Authorization: Bearer $GH_TOKEN" \
   -H "Content-Type: application/json" \
+  -H "Editor-Version: vscode/1.85.1" \
   -d "{
     \"model\": \"gpt-4o\",
     \"messages\": [
