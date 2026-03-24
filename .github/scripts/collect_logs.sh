@@ -5,20 +5,20 @@ NAMESPACE="${NAMESPACE:-apps}"
 OUTFILE="logs.txt"
 
 echo "==== [CRITICAL] CI/CD BUILD LOGS (MAVEN) ====" > "$OUTFILE"
+
+# 1. Grab the actual compilation error from the GitHub CLI output
 if [ -f "maven_output.log" ]; then
-    # Grab the last 1000 lines of the actual build failure fetched via GH CLI
-    tail -n 1000 maven_output.log >> "$OUTFILE"
+    # We take 2000 lines to ensure we don't miss the 'Alphabet Error' stack trace
+    tail -n 2000 maven_output.log >> "$OUTFILE"
 else
-    echo "No maven_output.log found. Error likely happened at the K8s level." >> "$OUTFILE"
+    echo "No maven_output.log found. Error likely at infrastructure level." >> "$OUTFILE"
 fi
 
-echo -e "\n==== KUBERNETES POD STATUS ====" >> "$OUTFILE"
-kubectl get pods -n "$NAMESPACE" >> "$OUTFILE" 2>&1 || true
-
-echo -e "\n==== KUBERNETES POD LOGS (FRESH ONLY) ====" >> "$OUTFILE"
+echo -e "\n==== KUBERNETES POD LOGS (LATEST 5 MINUTES ONLY) ====" >> "$OUTFILE"
+# This loop kills the 'Hibernate Hallucination' by ignoring old errors
 pods=$(kubectl get pods -n "$NAMESPACE" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || true)
 for p in $pods; do
-  echo -e "\n--- Pod: $p ---" >> "$OUTFILE"
-  # --since=5m KILLS THE POSTGRES HALLUCINATION
-  kubectl logs -n "$NAMESPACE" "$p" --tail=500 --since=5m >> "$OUTFILE" 2>&1 || true
+  echo -e "\n--- Pod Context: $p ---" >> "$OUTFILE"
+  # --since=5m is the key. It ignores the Postgres restart from yesterday.
+  kubectl logs -n "$NAMESPACE" "$p" --tail=200 --since=5m >> "$OUTFILE" 2>&1 || true
 done

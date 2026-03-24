@@ -1,0 +1,2 @@
+sudo ./svc.sh status - runner status command
+source ~/ecr-bridge/.venv/bin/activate  - activate the env for ecr bridge
