@@ -16,12 +16,11 @@ fi
 ERROR_ZONE=$(grep -iE -C 20 "COMPILATION ERROR|Compilation failure|BUILD FAILURE|ERROR" "$LOG_FILE" | head -n 100)
 CLEAN_LOGS="${ERROR_ZONE:-$(tail -n 100 "$LOG_FILE")}"
 
-# 3. EXECUTE VIA GITHUB COPILOT API (The Stable Way)
-echo "Consulting Copilot API for Root Cause..." >> "$OUT"
+# 3. EXECUTE VIA GITHUB COPILOT API (With Debugging)
+echo "Consulting Copilot API..." >> "$OUT"
 
-# We use the GH_TOKEN you added to your secrets
-# The prompt is structured for a 3-bullet response
-RESPONSE=$(curl -s -X POST "https://api.github.com/copilot/chat/completions" \
+# Store the HTTP status code and the response body
+RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://api.github.com/copilot/chat/completions" \
   -H "Authorization: Bearer $GH_TOKEN" \
   -H "Content-Type: application/json" \
   -d "{
@@ -38,12 +37,15 @@ RESPONSE=$(curl -s -X POST "https://api.github.com/copilot/chat/completions" \
     ]
   }")
 
-# 4. EXTRACT CONTENT (Parsing the JSON response)
-# We use 'jq' if available, otherwise raw sed to pull the message content
-if command -v jq >/dev/null 2>&1; then
-    echo "$RESPONSE" | jq -r '.choices[0].message.content' >> "$OUT"
-else
-    echo "$RESPONSE" | sed -n 's/.*"content": "\(.*\)".*/\1/p' >> "$OUT"
-fi
+# Split response and status code
+HTTP_BODY=$(echo "$RESPONSE" | sed '$d')
+HTTP_STATUS=$(echo "$RESPONSE" | tail -n 1)
 
-echo -e "\n--------------------------------------------" >> "$OUT"
+if [ "$HTTP_STATUS" -ne 200 ]; then
+    echo "CRITICAL: API returned Status $HTTP_STATUS" >> "$OUT"
+    echo "RAW ERROR: $HTTP_BODY" >> "$OUT"
+else
+    # Extract content safely
+    CONTENT=$(echo "$HTTP_BODY" | jq -r '.choices[0].message.content // "No content found in response"')
+    echo "$CONTENT" >> "$OUT"
+fi
