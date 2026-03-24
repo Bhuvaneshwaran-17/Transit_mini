@@ -108,7 +108,6 @@ jobs:
       LOCAL_ECR_CA: ${{ secrets.LOCAL_ECR_CA }}
 
   # --- Stage 5: AI RCA Analysis ---
-    # --- Stage 5: AI RCA Analysis ---
   ai_log_analysis:
     name: AI Root-Cause Analysis
     runs-on: [ self-hosted, linux ]
@@ -121,23 +120,22 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Fetch Local Build Logs (Bypass GH CLI)
+      - name: Fetch Pipeline Logs
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          echo "==== CAPTURING LOCAL RUNNER LOGS ===="
-          # Locate the maven_output.log from the failed service workspace
-          # We search the Auth/apps directory or the root
-          LOCAL_LOG=$(find . -name "maven_output.log" -not -path "*/target/*" | head -n 1)
+          # 1. First, try to get failed logs specifically
+          gh run view ${{ github.run_id }} --log-failed > maven_output.log
 
-          if [ -n "$LOCAL_LOG" ] && [ -s "$LOCAL_LOG" ]; then
-            cp "$LOCAL_LOG" maven_output.log
-            echo "Successfully captured local logs from: $LOCAL_LOG"
-          else
-            echo "Local maven_output.log not found. Attempting to capture tail of runner workspace..."
-            # Fallback: Capture the last 500 lines of the current workspace logs
-            tail -n 500 logs.txt > maven_output.log 2>/dev/null || echo "No logs accessible." > maven_output.log
+          # 2. EMERGENCY FALLBACK: If maven_output.log is still empty, pull the WHOLE log
+          if [ ! -s maven_output.log ]; then
+            echo "Failed log fetch empty. Pulling full run log..."
+            gh run view ${{ github.run_id }} --log > maven_output.log
           fi
 
+          # 3. VERIFICATION (This will show up in your GitHub Action console)
           echo "Log file size: $(wc -c < maven_output.log) bytes"
+          head -n 20 maven_output.log
 
       - name: AI RCA with Copilot
         env:
