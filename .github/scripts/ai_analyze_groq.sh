@@ -41,8 +41,7 @@ PROMPT="Analyze these Maven build logs.
 3. Ignore all database, Hibernate, and JDBC connection noise.
 4. Be brief. Maximum 3 bullet points."
 
-echo "$CLEAN_LOGS" | gh copilot explain "$PROMPT" >> "$OUT"
-
+echo "$CLEAN_LOGS" | gh copilot explain "$PROMPT" --no-interactive >> "$OUT" 2>&1
 # 4. FINAL VERDICT
 echo -e "\n--------------------------------------------" >> "$OUT"
 echo "Analysis complete. Output saved to $OUT"
