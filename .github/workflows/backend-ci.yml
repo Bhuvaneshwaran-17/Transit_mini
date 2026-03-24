@@ -118,27 +118,37 @@ jobs:
        needs.docker.result == 'failure' || needs.sonar.result == 'failure')
 
     steps:
-      - name: Fetch Pipeline Logs
+      - name: Fetch Failed Job Logs via API
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # All upstream jobs are done because of 'needs'.
-          # Wait 10s for GitHub to finalize log files.
-          echo "Waiting 10s for GitHub to finalize logs..."
-          sleep 10
+          echo "Fetching failed job IDs from this run..."
 
-          # 1. Fetch failed job logs specifically
-          echo "Fetching failed job logs..."
-          gh run view ${{ github.run_id }} --log-failed > maven_output.log 2>&1 || true
+          # Get all jobs in this run and find the ones that failed
+          FAILED_JOB_IDS=$(gh api \
+            /repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs \
+            --jq '.jobs[] | select(.conclusion == "failure") | .id')
 
-          # 2. FALLBACK: If still empty, pull the full run log
-          if [ ! -s maven_output.log ]; then
-            echo "Failed log fetch empty. Pulling full run log..."
-            gh run view ${{ github.run_id }} --log > maven_output.log 2>&1 || true
+          if [ -z "$FAILED_JOB_IDS" ]; then
+            echo "No failed jobs found via API. Trying 'in_progress' jobs..."
+            FAILED_JOB_IDS=$(gh api \
+              /repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs \
+              --jq '.jobs[] | select(.conclusion != "success" and .conclusion != "skipped") | .id')
           fi
 
-          # 3. VERIFICATION
-          echo "Log file size: $(wc -c < maven_output.log) bytes"
+          echo "Failed Job IDs: $FAILED_JOB_IDS"
+          echo "" > maven_output.log
+
+          # Fetch logs for each failed job individually by job ID
+          for JOB_ID in $FAILED_JOB_IDS; do
+            echo "==== Fetching logs for Job ID: $JOB_ID ====" >> maven_output.log
+            gh api /repos/${{ github.repository }}/actions/jobs/$JOB_ID/logs >> maven_output.log 2>&1 || true
+            echo "" >> maven_output.log
+          done
+
+
+          # VERIFICATION
+          echo "Final log file size: $(wc -c < maven_output.log) bytes"
           head -n 20 maven_output.log
 
       - name: Upload Logs Artifact
