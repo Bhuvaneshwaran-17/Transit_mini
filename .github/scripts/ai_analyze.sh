@@ -4,7 +4,7 @@
 OUT="ai_summary.txt"
 LOG_FILE="maven_output.log"
 
-echo "===== AI ROOT CAUSE ANALYSIS (COPILOT-POWERED) =====" > "$OUT"
+echo "===== AI ROOT CAUSE ANALYSIS (CLAUDE-POWERED) =====" > "$OUT"
 
 # 1. VERIFY DATA
 if [ ! -f "$LOG_FILE" ] || [ ! -s "$LOG_FILE" ]; then
@@ -13,46 +13,26 @@ if [ ! -f "$LOG_FILE" ] || [ ! -s "$LOG_FILE" ]; then
 fi
 
 # 2. SURGICAL LOG CAPTURE
+# Capture the compilation error specifically
 ERROR_ZONE=$(grep -iE -C 50 "COMPILATION ERROR|Compilation failure|BUILD FAILURE|ERROR" "$LOG_FILE" | head -n 300)
 
 if [ -z "$ERROR_ZONE" ]; then
     CLEAN_LOGS=$(tail -n 250 "$LOG_FILE")
-    echo "[WARNING] Sending raw tail logs to Copilot..." >> "$OUT"
+    echo "[WARNING] Sending raw tail logs..." >> "$OUT"
 else
     CLEAN_LOGS="$ERROR_ZONE"
-    echo "[SUCCESS] Found error markers. Analyzing with Copilot..." >> "$OUT"
+    echo "[SUCCESS] Found error markers. Analyzing with Claude..." >> "$OUT"
 fi
 
-# 3. EXECUTE VIA COPILOT
-echo "Consulting Copilot for Root Cause..." >> "$OUT"
+# 3. EXECUTE VIA COPILOT (The Non-Breaking Syntax)
+echo "Consulting Claude for Root Cause..." >> "$OUT"
 
-# Write prompt + logs to a temp file to avoid shell argument corruption
-# Maven logs contain special chars ([, ], <, >, `) that break inline string args
-TMP_PROMPT=$(mktemp)
-cat > "$TMP_PROMPT" <<'PROMPT_EOF'
-[STRICT RCA MODE] You are a Senior DevOps Architect. Analyze the following Maven logs for the 'auth' service.
-1. Identify the exact Error Type.
-2. Provide the File Path and Line Number.
-3. Provide a concise Code Fix.
-Format the response as a clean 3-bullet list. Do NOT include conversational filler.
-PROMPT_EOF
+# We pass the instruction via -p and the logs via PIPE.
+# This avoids shell expansion errors with brackets [ ] and special chars.
+echo "$CLEAN_LOGS" | gh copilot explain -p "Analyze these Maven logs for the 'auth' service. Identify the Error Type, File Path with Line Number, and a concise Code Fix. Provide a 3-bullet list only. Text-only response." >> "$OUT" 2>&1
 
-echo "" >> "$TMP_PROMPT"
-echo "$CLEAN_LOGS" >> "$TMP_PROMPT"
-
-# -p flag on 'gh copilot explain' runs it non-interactively
-gh copilot explain -p "$(cat "$TMP_PROMPT")" >> "$OUT" 2>&1
-
-# Cleanup temp file
-rm -f "$TMP_PROMPT"
-
+# 4. CLEANUP
 # Strip ANSI color codes from Copilot output
 sed -i 's/\x1b\[[0-9;]*m//g' "$OUT"
 
-# Verify Copilot actually returned something useful
-if grep -q "Welcome to GitHub Copilot\|not available\|command not found\|authentication" "$OUT"; then
-    echo "[WARNING] Copilot may not have returned a valid RCA. Check ai_summary.txt manually." >> "$OUT"
-fi
-
 echo -e "\n--------------------------------------------" >> "$OUT"
-echo "Analysis complete. Output saved to $OUT"
