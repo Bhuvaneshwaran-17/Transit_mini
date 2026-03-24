@@ -17,14 +17,17 @@ fi
 # 2. SURGICAL LOG CAPTURE
 # We extract the 'COMPILATION ERROR' block + 25 lines of context
 # This keeps the prompt clean and avoids Hibernate/JDBC noise
-ERROR_ZONE=$(grep -C 25 "COMPILATION ERROR" logs.txt)
+# 1. Use -i for case-insensitive
+# 2. Use -E to search for MULTIPLE keywords (Compilation OR Failure OR Error)
+ERROR_ZONE=$(grep -iE -C 30 "COMPILATION ERROR|Compilation failure|BUILD FAILURE|ERROR" logs.txt | head -n 200)
 
 if [ -z "$ERROR_ZONE" ]; then
-    # Fallback: If no compilation error, take the last 100 lines for a general failure
-    CLEAN_LOGS=$(tail -n 100 logs.txt)
-    echo "[INFO] No compilation marker found. Analyzing tail logs..." >> "$OUT"
+    # If it still finds nothing, the file 'logs.txt' is likely EMPTY
+    CLEAN_LOGS=$(tail -n 150 logs.txt)
+    echo "[WARNING] No specific error markers found. Sending raw tail logs to Copilot..." >> "$OUT"
 else
     CLEAN_LOGS="$ERROR_ZONE"
+    echo "[SUCCESS] Found error markers. Sending context to Copilot..." >> "$OUT"
 fi
 
 # 3. EXECUTE VIA NATIVE COPILOT
