@@ -35,12 +35,11 @@ fi
 # The --prompt-file or -p flag is used for the instruction
 echo "Consulting Copilot for Root Cause..."
 
-PROMPT="Analyze these Maven build logs.
-1. Identify the EXACT file and line number of the failure.
-2. Explain why the build failed (e.g., Syntax Error, Missing Dependency).
-3. Ignore all database, Hibernate, and JDBC connection noise.
-4. Be brief. Maximum 3 bullet points."
+# 1. Define the High-Value Prompt
+PROMPT="Explain these build logs. Identify the exact file, line, and fix. Be brief."
 
-echo "$CLEAN_LOGS" | gh copilot explain "$PROMPT" >> "$OUT" 2>&1# 4. FINAL VERDICT
+# 2. Use the 2026 'Direct Prompt' Syntax
+# We remove the 'explain' sub-command and use -p
+echo "$CLEAN_LOGS" | gh copilot -p "$PROMPT" >> "$OUT" 2>&1
 echo -e "\n--------------------------------------------" >> "$OUT"
 echo "Analysis complete. Output saved to $OUT"
