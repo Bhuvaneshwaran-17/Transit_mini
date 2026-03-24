@@ -29,10 +29,11 @@ echo "Consulting Claude for Root Cause..." >> "$OUT"
 
 # We pass the instruction via -p and the logs via PIPE.
 # This avoids shell expansion errors with brackets [ ] and special chars.
-echo "$CLEAN_LOGS" | gh copilot explain -p "Analyze these Maven logs for the 'auth' service. Identify the Error Type, File Path with Line Number, and a concise Code Fix. Provide a 3-bullet list only. Text-only response." >> "$OUT" 2>&1
+# 3. EXECUTE VIA NATIVE COPILOT (The only syntax your runner accepts)
+echo "Consulting Copilot for Root Cause..." >> "$OUT"
 
-# 4. CLEANUP
-# Strip ANSI color codes from Copilot output
-sed -i 's/\x1b\[[0-9;]*m//g' "$OUT"
+# We remove 'explain' and 'config'.
+# We use the -p flag directly on the root command.
+echo "$CLEAN_LOGS" | gh copilot -p "Analyze these Maven logs. Provide 3 bullets: Error Type, File:Line, and Fix. Text-only." >> "$OUT" 2>&1
 
 echo -e "\n--------------------------------------------" >> "$OUT"
