@@ -36,11 +36,11 @@ fi
 echo "Consulting Copilot for Root Cause..."
 
 # 1. Define a strict prompt for the standard model
-PROMPT="ACT AS A LOG ANALYZER. Analyze the provided text for a Maven/Java build failure. Identify the exact file, line, and fix. Provide a 3-sentence RCA. DO NOT scan the local filesystem."
+# 1. Define a strict, "Text-Only" prompt for GPT-4.1
+PROMPT="[RCA MODE] Analyze the provided text ONLY. Do NOT use external tools or scan the filesystem. Identify the Maven/Java build failure for the 'auth' service. Provide a 3-bullet point RCA: Error Type, File:Line, and Recommended Fix."
 
-# 2. Force the standard model (gpt-4o) and use the --no-context flag
-# We use -m to specify the model if your CLI version supports it,
-# or we simply rely on the default by removing any model overrides.
-echo "$CLEAN_LOGS" | gh copilot explain -p "$PROMPT" --no-context >> "$OUT" 2>&1
+# 2. Execute with the standard prompt flag
+# Note: We remove all experimental flags like --no-context or --no-interactive
+echo "$CLEAN_LOGS" | gh copilot -p "$PROMPT" >> "$OUT" 2>&1
 echo -e "\n--------------------------------------------" >> "$OUT"
 echo "Analysis complete. Output saved to $OUT"
