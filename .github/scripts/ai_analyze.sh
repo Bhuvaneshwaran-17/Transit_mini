@@ -24,16 +24,21 @@ else
     echo "[SUCCESS] Found error markers. Analyzing with Claude..." >> "$OUT"
 fi
 
-# 3. EXECUTE VIA COPILOT (The Non-Breaking Syntax)
-echo "Consulting Claude for Root Cause..." >> "$OUT"
-
-# We pass the instruction via -p and the logs via PIPE.
-# This avoids shell expansion errors with brackets [ ] and special chars.
-# 3. EXECUTE VIA NATIVE COPILOT (The only syntax your runner accepts)
+# 3. EXECUTE VIA NATIVE COPILOT (The CLI-Suggested Syntax)
 echo "Consulting Copilot for Root Cause..." >> "$OUT"
 
-# We remove 'explain' and 'config'.
-# We use the -p flag directly on the root command.
-echo "$CLEAN_LOGS" | gh copilot -p "Analyze these Maven logs. Provide 3 bullets: Error Type, File:Line, and Fix. Text-only." >> "$OUT" 2>&1
+# 1. We combine the Instruction and the Logs into one variable.
+# 2. We use the root 'gh copilot' command with -p.
+# 3. We QUOTE the entire prompt to satisfy the CLI's picky parser.
+
+FULL_PROMPT="[RCA MODE] Analyze these Maven logs: $CLEAN_LOGS. Provide a 3-bullet RCA: Error, File:Line, and Fix."
+
+gh copilot -p "$FULL_PROMPT" >> "$OUT" 2>&1
+
+# 4. SAFETY CHECK: If it still returns 'Invalid command', we use the -i flag as a last resort.
+if grep -q "Invalid command format" "$OUT"; then
+    echo "Falling back to interactive-bypass mode..." >> "$OUT"
+    gh copilot -i "explain -p '$FULL_PROMPT'" >> "$OUT" 2>&1
+fi
 
 echo -e "\n--------------------------------------------" >> "$OUT"
