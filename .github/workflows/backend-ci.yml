@@ -124,16 +124,29 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # 1. First, try to get failed logs specifically
-          gh run view ${{ github.run_id }} --log-failed > maven_output.log
+          # 1. Wait for all other jobs to complete before fetching logs
+          echo "Waiting for run to complete..."
+          for i in $(seq 1 20); do
+            STATUS=$(gh run view ${{ github.run_id }} --json status -q '.status')
+            echo "Attempt $i: Run status = $STATUS"
+            if [ "$STATUS" = "completed" ]; then
+              echo "Run is complete. Fetching logs..."
+              break
+            fi
+            echo "Still in progress. Waiting 15 seconds..."
+            sleep 15
+          done
 
-          # 2. EMERGENCY FALLBACK: If maven_output.log is still empty, pull the WHOLE log
+          # 2. Fetch failed logs specifically
+          gh run view ${{ github.run_id }} --log-failed > maven_output.log 2>&1 || true
+
+          # 3. EMERGENCY FALLBACK: If maven_output.log is still empty, pull the WHOLE log
           if [ ! -s maven_output.log ]; then
             echo "Failed log fetch empty. Pulling full run log..."
-            gh run view ${{ github.run_id }} --log > maven_output.log
+            gh run view ${{ github.run_id }} --log > maven_output.log 2>&1 || true
           fi
 
-          # 3. VERIFICATION (This will show up in your GitHub Action console)
+          # 4. VERIFICATION (This will show up in your GitHub Action console)
           echo "Log file size: $(wc -c < maven_output.log) bytes"
           head -n 20 maven_output.log
 
