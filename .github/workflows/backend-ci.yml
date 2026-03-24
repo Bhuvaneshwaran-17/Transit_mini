@@ -107,30 +107,34 @@ jobs:
       TEAMS_WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
       LOCAL_ECR_CA: ${{ secrets.LOCAL_ECR_CA }}
 
-  # --- Stage 5: Log Collection ---
-  collect_logs:
-    name: Collect Pipeline Logs
+  # --- Stage 5: Log Collection + AI RCA Analysis ---
+  ai_log_analysis:
+    name: Collect Logs & AI RCA
     runs-on: [ self-hosted, linux ]
     needs: [ test, sonar, build, docker ]
     if: |
       always() && !cancelled() &&
       (needs.test.result == 'failure' || needs.build.result == 'failure' ||
        needs.docker.result == 'failure' || needs.sonar.result == 'failure')
+    outputs:
+      summary: ${{ steps.load_rca.outputs.summary }}
 
     steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
       - name: Fetch Failed Job Logs via API
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           echo "Fetching failed job IDs from this run..."
 
-          # Get all jobs in this run and find the ones that failed
           FAILED_JOB_IDS=$(gh api \
             /repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs \
             --jq '.jobs[] | select(.conclusion == "failure") | .id')
 
           if [ -z "$FAILED_JOB_IDS" ]; then
-            echo "No failed jobs found via API. Trying 'in_progress' jobs..."
+            echo "No failed jobs found. Trying non-success jobs..."
             FAILED_JOB_IDS=$(gh api \
               /repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs \
               --jq '.jobs[] | select(.conclusion != "success" and .conclusion != "skipped") | .id')
@@ -139,42 +143,14 @@ jobs:
           echo "Failed Job IDs: $FAILED_JOB_IDS"
           echo "" > maven_output.log
 
-          # Fetch logs for each failed job individually by job ID
           for JOB_ID in $FAILED_JOB_IDS; do
             echo "==== Fetching logs for Job ID: $JOB_ID ====" >> maven_output.log
             gh api /repos/${{ github.repository }}/actions/jobs/$JOB_ID/logs >> maven_output.log 2>&1 || true
             echo "" >> maven_output.log
           done
 
-
-          # VERIFICATION
           echo "Final log file size: $(wc -c < maven_output.log) bytes"
           head -n 20 maven_output.log
-
-      - name: Upload Logs Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: pipeline-logs
-          path: maven_output.log
-          retention-days: 1
-
-  # --- Stage 6: AI RCA Analysis ---
-  ai_analysis:
-    name: AI Root-Cause Analysis
-    runs-on: [ self-hosted, linux ]
-    needs: collect_logs
-    if: ${{ always() && needs.collect_logs.result == 'success' }}
-    outputs:
-      summary: ${{ steps.load_rca.outputs.summary }}
-
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Download Logs Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: pipeline-logs
 
       - name: Run AI RCA with Copilot
         env:
@@ -197,28 +173,20 @@ jobs:
             echo "summary=RCA could not identify the specific cause. Check raw logs." >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Upload AI RCA Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ai-rca
-          path: |
-            ai_summary.txt
-            maven_output.log
-
-  # --- Stage 7: Centralized Notification ---
+  # --- Stage 6: Centralized Notification ---
   notify_failure:
     name: Notify Teams
-    needs: ai_analysis
+    needs: ai_log_analysis
     if: |
       always() &&
-      needs.ai_analysis.result != 'skipped' &&
-      needs.ai_analysis.result != 'cancelled'
+      needs.ai_log_analysis.result != 'skipped' &&
+      needs.ai_log_analysis.result != 'cancelled'
     uses: Bhuvaneshwaran-17/central-devops-tooling/.github/workflows/teams-notifier.yml@main
     with:
       project_name: ${{ github.repository }}
       component_name: "auth"
       job_name: "Pipeline Failure Analysis"
       status: "failure"
-      rca: ${{ needs.ai_analysis.outputs.summary }}
+      rca: ${{ needs.ai_log_analysis.outputs.summary }}
     secrets:
       WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
