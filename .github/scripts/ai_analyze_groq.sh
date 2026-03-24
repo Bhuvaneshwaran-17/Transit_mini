@@ -35,11 +35,12 @@ fi
 # The --prompt-file or -p flag is used for the instruction
 echo "Consulting Copilot for Root Cause..."
 
-# 1. Define the High-Value Prompt
-PROMPT="Explain these build logs. Identify the exact file, line, and fix. Be brief."
+# 1. Define a strict prompt for the standard model
+PROMPT="ACT AS A LOG ANALYZER. Analyze the provided text for a Maven/Java build failure. Identify the exact file, line, and fix. Provide a 3-sentence RCA. DO NOT scan the local filesystem."
 
-# 2. Use the 2026 'Direct Prompt' Syntax
-# We remove the 'explain' sub-command and use -p
-echo "$CLEAN_LOGS" | gh copilot -p "$PROMPT" >> "$OUT" 2>&1
+# 2. Force the standard model (gpt-4o) and use the --no-context flag
+# We use -m to specify the model if your CLI version supports it,
+# or we simply rely on the default by removing any model overrides.
+echo "$CLEAN_LOGS" | gh copilot explain -p "$PROMPT" --no-context >> "$OUT" 2>&1
 echo -e "\n--------------------------------------------" >> "$OUT"
 echo "Analysis complete. Output saved to $OUT"
