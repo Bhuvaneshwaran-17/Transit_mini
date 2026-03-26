@@ -6,43 +6,63 @@ LOG_FILE="maven_output.log"
 
 echo "===== AI ROOT CAUSE ANALYSIS (MODELS GATEWAY) =====" > "$OUT"
 
-# 1. SURGICAL LOG EXTRACTION
-# Finds the first Java file failure with line and column numbers
-RAW_LOC=$(grep -oE "[a-zA-Z0-9/_.-]+\.java:\[[0-9]+,[0-9]+\]" "$LOG_FILE" | head -n 1)
-FILE_PATH="Unknown"
+# 1. DEFINE ERROR CATEGORIES & KEYWORDS
+# DEP: Missing libraries/starters
+# SYNTAX: Compilation errors, typos
+# TEST: JUnit/Test failures
+# INFRA: Runner/Environment issues (OOM, Disk, Network)
+PATTERN_DEP="package .* does not exist|symbol: class|DependencyResolutionException|could not resolve dependencies"
+PATTERN_SYNTAX="error: ';' expected|error: not a statement|error: cannot find symbol|error: invalid method declaration"
+PATTERN_TEST="Tests run: .* Failures: [1-9]|there are test failures|failed to execute goal .*maven-surefire-plugin"
+PATTERN_INFRA="OutOfMemoryError|No space left on device|Connection refused|timed out|could not download artifact"
 
-if [ ! -z "$RAW_LOC" ]; then
-    FILE_PATH=$(echo "$RAW_LOC" | cut -d: -f1 | sed "s|^.*/src/|src/|")
-fi
+# 2. PERFORM TRIAGE (THE ROUTER)
+CATEGORY="GENERAL"
+HINT=""
 
-# 2. THE DEPENDENCY SENSOR (Hallucination Killer)
-# Only grabs the core error message to keep the payload small
-DEP_ERROR=$(grep -iE "package .* does not exist|symbol: class|DependencyResolutionException" "$LOG_FILE" | head -n 3)
-
-if [ ! -z "$DEP_ERROR" ]; then
-    INSTRUCTION="CRITICAL: This is a MISSING DEPENDENCY. Suggest the missing Maven <dependency> XML. Do NOT suggest Java code changes."
+if grep -iE -q "$PATTERN_DEP" "$LOG_FILE"; then
+    CATEGORY="DEPENDENCY"
+    HINT=$(grep -iE "$PATTERN_DEP" "$LOG_FILE" | head -n 3)
+    INSTRUCTION="CRITICAL: Missing Spring Boot Starter. Identify the correct 'spring-boot-starter' XML. DO NOT suggest Java code."
+elif grep -iE -q "$PATTERN_SYNTAX" "$LOG_FILE"; then
+    CATEGORY="SYNTAX"
+    HINT=$(grep -iE "$PATTERN_SYNTAX" "$LOG_FILE" | head -n 3)
+    INSTRUCTION="CRITICAL: Java Syntax Error. Identify the typo or missing symbol. Suggest a one-line code fix."
+elif grep -iE -q "$PATTERN_TEST" "$LOG_FILE"; then
+    CATEGORY="TEST"
+    HINT=$(grep -iE -C 2 "Failed tests:" "$LOG_FILE" | head -n 5)
+    INSTRUCTION="CRITICAL: Unit Test Failure. Identify the failed assertion or exception in the test case. Suggest a logic fix."
+elif grep -iE -q "$PATTERN_INFRA" "$LOG_FILE"; then
+    CATEGORY="INFRASTRUCTURE"
+    HINT=$(grep -iE "$PATTERN_INFRA" "$LOG_FILE" | head -n 3)
+    INSTRUCTION="CRITICAL: Runner/Environment Issue. This is NOT a code error. Suggest fix for GitHub Runner, memory, or network proxy."
 else
-    INSTRUCTION="This is a Syntax or Logic error. Suggest a one-line code fix."
+    # Fallback for unknown errors
+    HINT=$(tail -n 10 "$LOG_FILE")
+    INSTRUCTION="Unknown build failure. Analyze the logs and find the most likely root cause."
 fi
 
-# 3. SLIM LOG CONTEXT (Privacy-First & Lightweight)
-# Instead of 50 lines, we grab the 10 most relevant lines around the error
-LOG_CONTEXT=$(grep -iE -B 2 -A 7 "ERROR|FAILURE|Exception" "$LOG_FILE" | head -n 15 | tr -cd '[:alnum:].[:space:]:/-[],')
+# 3. SURGICAL EXTRACTION FOR TARGET FILE
+RAW_LOC=$(grep -oE "[a-zA-Z0-9/_.-]+\.java:\[[0-9]+,[0-9]+\]" "$LOG_FILE" | head -n 1)
+FILE_PATH=$(echo "$RAW_LOC" | cut -d: -f1 | sed "s|^.*/src/|src/|")
+[ -z "$FILE_PATH" ] && FILE_PATH="pom.xml or Infrastructure"
 
-# 4. THE PRODUCTION CALL (With Enhanced Error Reporting)
-echo "Requesting High-Precision RCA..." >> "$OUT"
+# 4. SLIM LOG CONTEXT (Privacy-First)
+LOG_CONTEXT=$(grep -iE -B 2 -A 8 "ERROR|FAILURE|Exception" "$LOG_FILE" | head -n 20 | tr -cd '[:alnum:].[:space:]:/-[],')
+
+# 5. THE PRODUCTION CALL
+echo "Detected Category: $CATEGORY. Requesting RCA..." >> "$OUT"
 
 PAYLOAD=$(jq -n \
-  --arg sys "You are a Senior Spring Boot Architect. $INSTRUCTION
-              IMPORTANT: If dependencies are missing in a Spring Boot project,
-              ALWAYS prefer suggesting the appropriate 'spring-boot-starter'
-              instead of individual raw libraries.
-              Use exactly this format:
-            PATH: [File Path]
-            ERROR: [One sentence technical cause]
-            FIX: [One line fix]
-            NO PROSE. NO ADVICE." \
-  --arg user "Target: $FILE_PATH \nLogs: $LOG_CONTEXT \nEvidence: $DEP_ERROR" \
+  --arg sys "You are a Senior DevOps and Spring Boot Architect.
+              Current Task: $INSTRUCTION
+              STRICT FORMAT:
+              PATH: [Target File]
+              CATEGORY: $CATEGORY
+              ERROR: [One sentence technical cause]
+              FIX: [One line solution]
+              NO PROSE. NO ADVICE." \
+  --arg user "Context Logs: $LOG_CONTEXT \nEvidence: $HINT \nTarget: $FILE_PATH" \
   '{model: "gpt-4o", messages: [{role: "system", content: $sys}, {role: "user", content: $user}]}')
 
 RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://models.inference.ai.azure.com/chat/completions" \
@@ -55,9 +75,8 @@ HTTP_BODY=$(echo "$RESPONSE" | sed '$d')
 
 if [ "$HTTP_STATUS" -eq 200 ]; then
     echo "$HTTP_BODY" | jq -r '.choices[0].message.content' >> "$OUT"
-    echo "SUCCESS: Precision RCA generated."
+    echo "SUCCESS: $CATEGORY RCA generated."
 else
-    # Better debugging: If it fails, we see the status and a snippet of the reason
-    echo "API FAILURE: HTTP $HTTP_STATUS" >> "$OUT"
+    echo "API FAILURE: $HTTP_STATUS" >> "$OUT"
     echo "$HTTP_BODY" | head -c 100 >> "$OUT"
 fi
