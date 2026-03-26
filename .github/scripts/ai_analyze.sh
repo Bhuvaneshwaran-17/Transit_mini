@@ -14,15 +14,31 @@ CODE_CONTEXT="No code context available."
 LINE_NUM="Unknown"
 
 if [ ! -z "$RAW_LOC" ]; then
-    FILE_PATH=$(echo "$RAW_LOC" | cut -d: -f1)
-    # This pulls JUST the numbers from the end of our RAW_LOC (e.g., 21)
+    RAW_PATH=$(echo "$RAW_LOC" | cut -d: -f1)
     LINE_NUM=$(echo "$RAW_LOC" | grep -oE "[0-9]+$")
 
-    echo "DEBUG: Identified error at $FILE_PATH on line $LINE_NUM"
+    # PATH NORMALIZATION:
+    # If the path is absolute, strip the GitHub Runner prefix to make it local
+    # This turns /home/runner/work/Repo/Repo/src/... into src/...
+    FILE_PATH=$(echo "$RAW_PATH" | sed "s|^.*/src/|src/|")
+
+    echo "DEBUG: Raw Path: $RAW_PATH"
+    echo "DEBUG: Normalized Path: $FILE_PATH"
+    echo "DEBUG: Target Line: $LINE_NUM"
 
     if [ -f "$FILE_PATH" ]; then
-        # Capture context with 'nl' to force the AI to see the actual line numbers
+        # Capture context with line numbers
         CODE_CONTEXT=$(sed -n "$((LINE_NUM-5)),$((LINE_NUM+5))p" "$FILE_PATH" | nl -ba -v $((LINE_NUM-5)))
+        echo "DEBUG: Code context captured successfully."
+    else
+        echo "DEBUG: CRITICAL - File not found at $FILE_PATH"
+        # Fallback: search for the file by name if the path is still broken
+        ALT_PATH=$(find . -name "$(basename "$FILE_PATH")" | head -n 1)
+        if [ ! -z "$ALT_PATH" ]; then
+             CODE_CONTEXT=$(sed -n "$((LINE_NUM-5)),$((LINE_NUM+5))p" "$ALT_PATH" | nl -ba -v $((LINE_NUM-5)))
+             FILE_PATH=$ALT_PATH
+             echo "DEBUG: Found file via fallback search: $FILE_PATH"
+        fi
     fi
 fi
 
