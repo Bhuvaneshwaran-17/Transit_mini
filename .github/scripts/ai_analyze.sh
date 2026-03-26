@@ -33,11 +33,15 @@ LOG_CONTEXT=$(grep -iE -B 2 -A 7 "ERROR|FAILURE|Exception" "$LOG_FILE" | head -n
 echo "Requesting High-Precision RCA..." >> "$OUT"
 
 PAYLOAD=$(jq -n \
-  --arg sys "You are a Senior DevOps Architect. $INSTRUCTION Use exactly this format:
-PATH: [File Path]
-ERROR: [One sentence technical cause]
-FIX: [One line fix]
-NO PROSE. NO ADVICE." \
+  --arg sys "You are a Senior Spring Boot Architect. $INSTRUCTION
+              IMPORTANT: If dependencies are missing in a Spring Boot project,
+              ALWAYS prefer suggesting the appropriate 'spring-boot-starter'
+              instead of individual raw libraries.
+              Use exactly this format:
+            PATH: [File Path]
+            ERROR: [One sentence technical cause]
+            FIX: [One line fix]
+            NO PROSE. NO ADVICE." \
   --arg user "Target: $FILE_PATH \nLogs: $LOG_CONTEXT \nEvidence: $DEP_ERROR" \
   '{model: "gpt-4o", messages: [{role: "system", content: $sys}, {role: "user", content: $user}]}')
 
