@@ -6,21 +6,23 @@ LOG_FILE="maven_output.log"
 
 echo "===== AI ROOT CAUSE ANALYSIS (MODELS GATEWAY) =====" > "$OUT"
 
-# 1. DEFINE ERROR CATEGORIES & KEYWORDS
-# DEP: Missing libraries/starters
-# SYNTAX: Compilation errors, typos
-# TEST: JUnit/Test failures
-# INFRA: Runner/Environment issues (OOM, Disk, Network)
+# 1. DEFINE ERROR CATEGORIES & KEYWORDS (Expanded with Senior Dev feedback)
 PATTERN_DEP="package .* does not exist|symbol: class|DependencyResolutionException|could not resolve dependencies"
 PATTERN_SYNTAX="error: ';' expected|error: not a statement|error: cannot find symbol|error: invalid method declaration"
 PATTERN_TEST="Tests run: .* Failures: [1-9]|there are test failures|failed to execute goal .*maven-surefire-plugin"
-PATTERN_INFRA="OutOfMemoryError|No space left on device|Connection refused|timed out|could not download artifact"
 
+# NEW: Added Java Version Mismatch, Tomcat Conflicts, and Port Errors
+# Ensure 'Port already in use' is exactly in the list
+PATTERN_INFRA="OutOfMemoryError|No space left on device|Connection refused|timed out|UnsupportedClassVersionError|major.minor version|Port.*already in use|ConnectorConfigException"
 # 2. PERFORM TRIAGE (THE ROUTER)
 CATEGORY="GENERAL"
 HINT=""
 
-if grep -iE -q "$PATTERN_DEP" "$LOG_FILE"; then
+if grep -iE -q "$PATTERN_INFRA" "$LOG_FILE"; then
+    CATEGORY="INFRASTRUCTURE"
+    HINT=$(grep -iE "$PATTERN_INFRA" "$LOG_FILE" | head -n 3)
+    INSTRUCTION="CRITICAL: Environment Failure. Check for Java Version Mismatch (major.minor errors) or Tomcat Port conflicts. Suggest a fix for the Maven Runner or application properties."
+elif grep -iE -q "$PATTERN_DEP" "$LOG_FILE"; then
     CATEGORY="DEPENDENCY"
     HINT=$(grep -iE "$PATTERN_DEP" "$LOG_FILE" | head -n 3)
     INSTRUCTION="CRITICAL: Missing Spring Boot Starter. Identify the correct 'spring-boot-starter' XML. DO NOT suggest Java code."
@@ -31,13 +33,8 @@ elif grep -iE -q "$PATTERN_SYNTAX" "$LOG_FILE"; then
 elif grep -iE -q "$PATTERN_TEST" "$LOG_FILE"; then
     CATEGORY="TEST"
     HINT=$(grep -iE -C 2 "Failed tests:" "$LOG_FILE" | head -n 5)
-    INSTRUCTION="CRITICAL: Unit Test Failure. Identify the failed assertion or exception in the test case. Suggest a logic fix."
-elif grep -iE -q "$PATTERN_INFRA" "$LOG_FILE"; then
-    CATEGORY="INFRASTRUCTURE"
-    HINT=$(grep -iE "$PATTERN_INFRA" "$LOG_FILE" | head -n 3)
-    INSTRUCTION="CRITICAL: Runner/Environment Issue. This is NOT a code error. Suggest fix for GitHub Runner, memory, or network proxy."
+    INSTRUCTION="CRITICAL: Unit Test Failure. Identify the failed assertion or exception. Suggest a logic fix."
 else
-    # Fallback for unknown errors
     HINT=$(tail -n 10 "$LOG_FILE")
     INSTRUCTION="Unknown build failure. Analyze the logs and find the most likely root cause."
 fi

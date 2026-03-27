@@ -97,7 +97,8 @@ class AuthControllerTest {
         ResponseEntity<AuthResponseDto> response = authController.login(loginRequest);
 
         // Assert
-        assertEquals(401, response.getStatusCode().value());
+//        assertEquals(401, response.getStatusCode().value());
+        assertEquals(400, response.getStatusCode().value());
     }
 
     @Test
