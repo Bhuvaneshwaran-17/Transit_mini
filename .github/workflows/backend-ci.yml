@@ -26,21 +26,18 @@ jobs:
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '21'
+          distribution: temurin
+          java-version: 21
 
-      - name: Run Tests
-        run: mvn -B test
+      - name: Build and Test
+        run: mvn -B clean verify
         working-directory: ${{ matrix.service.path }}
 
-      - name: Build Project
-        run: mvn -B clean package -DskipTests
-        working-directory: ${{ matrix.service.path }}
-
-      - name: SonarQube Scan
+      - name: SonarCloud Scan
         run: |
           mvn sonar:sonar \
             -Dsonar.projectKey=${{ matrix.service.name }} \
+            -Dsonar.organization=${{ secrets.SONAR_ORG_KEY }} \
             -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
             -Dsonar.login=${{ secrets.SONAR_TOKEN }}
         working-directory: ${{ matrix.service.path }}
