@@ -1,107 +1,153 @@
-name: Backend CI (Monorepo)
+name: Backend CI (Simple)
 
 on:
-  pull_request:
   push:
     branches: ["main"]
-
-permissions:
-  contents: read
-  packages: write
-
-concurrency:
-  group: backend-ci-${{ github.ref }}
-  cancel-in-progress: true
+  pull_request:
 
 jobs:
-  test:
-    name: Test - ${{ matrix.svc.name }}
+  backend-ci:
+    runs-on: ubuntu-latest
+
     strategy:
-      fail-fast: false
       matrix:
-        svc: &services
+        service:
           - name: auth
-            pom_path: Auth/apps/pom.xml
-            workdir: Auth/apps
-            sonar_key: auth-backend
-            dockerfile: Auth/apps/Dockerfile
-            image_name: bhuvi2003/auth
+            path: Auth/apps
           - name: tap
-            pom_path: Tap/transport/pom.xml
-            workdir: Tap/transport
-            sonar_key: tap-backend
-            dockerfile: Tap/transport/Dockerfile
-            image_name: bhuvi2003/tap
+            path: Tap/transport
           - name: transitcard
-            pom_path: TransitCard/TransitCard/pom.xml
-            workdir: TransitCard/TransitCard
-            sonar_key: transitcard-backend
-            dockerfile: TransitCard/TransitCard/Dockerfile
-            image_name: bhuvi2003/transitcard
+            path: TransitCard/TransitCard
 
-    uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/java-test.yml@main
-    with:
-      java_version: "21"
-      pom_path: ${{ matrix.svc.pom_path }}
-      reports_artifact_name: test-reports-${{ matrix.svc.name }}
-    secrets:
-      TEAMS_WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-  sonar:
-    name: Sonar - ${{ matrix.svc.name }}
-    needs: test
-    strategy:
-      fail-fast: false
-      matrix:
-        svc: *services
-    uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/sonarqube-analysis.yml@main
-    with:
-      java_version: "21"
-      pom_path: ${{ matrix.svc.pom_path }}
-      sonar_project_key: ${{ matrix.svc.sonar_key }}
-      run_quality_gate: true
-    secrets:
-      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-      SONAR_ORG_KEY: ${{ secrets.SONAR_ORG_KEY }}
-      TEAMS_WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
 
-  build:
-    name: Build - ${{ matrix.svc.name }}
-    needs: sonar
-    strategy:
-      fail-fast: false
-      matrix:
-        svc: *services
-    uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/java-build.yml@main
-    with:
-      project_name: ${{ matrix.svc.name }}
-      java_version: "21"
-      pom_path: ${{ matrix.svc.pom_path }}
-      build_command: "mvn -B clean package -DskipTests"
-    secrets:
-      TEAMS_WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+      - name: Run Tests
+        run: mvn -B test
+        working-directory: ${{ matrix.service.path }}
 
-  docker:
-    name: Docker - ${{ matrix.svc.name }}
-    needs: build
-    permissions:
-      contents: read
-      security-events: write
-      pull-requests: write # Added this to allow Docker Scout comments
-    strategy:
-      fail-fast: false
-      matrix:
-        svc: *services
-    uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/docker-build-push.yml@main
-    with:
-      project_name: ${{ matrix.svc.name }}
-      image_name: ${{ matrix.svc.image_name }}
-      context: ${{ matrix.svc.workdir }}
-      dockerfile: ${{ matrix.svc.dockerfile }}
-      push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-    secrets:
-      REGISTRY_URL: ${{ secrets.REGISTRY_URL }}
-      REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
-      REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
-      TEAMS_WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+      - name: Build Project
+        run: mvn -B clean package -DskipTests
+        working-directory: ${{ matrix.service.path }}
+
+      - name: SonarQube Scan
+        run: |
+          mvn sonar:sonar \
+            -Dsonar.projectKey=${{ matrix.service.name }} \
+            -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
+            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+        working-directory: ${{ matrix.service.path }}
+# name: Backend CI (Monorepo)
+
+# on:
+#   pull_request:
+#   push:
+#     branches: ["main"]
+
+# permissions:
+#   contents: read
+#   packages: write
+
+# concurrency:
+#   group: backend-ci-${{ github.ref }}
+#   cancel-in-progress: true
+
+# jobs:
+#   test:
+#     name: Test - ${{ matrix.svc.name }}
+#     strategy:
+#       fail-fast: false
+#       matrix:
+#         svc: &services
+#           - name: auth
+#             pom_path: Auth/apps/pom.xml
+#             workdir: Auth/apps
+#             sonar_key: auth-backend
+#             dockerfile: Auth/apps/Dockerfile
+#             image_name: bhuvi2003/auth
+#           - name: tap
+#             pom_path: Tap/transport/pom.xml
+#             workdir: Tap/transport
+#             sonar_key: tap-backend
+#             dockerfile: Tap/transport/Dockerfile
+#             image_name: bhuvi2003/tap
+#           - name: transitcard
+#             pom_path: TransitCard/TransitCard/pom.xml
+#             workdir: TransitCard/TransitCard
+#             sonar_key: transitcard-backend
+#             dockerfile: TransitCard/TransitCard/Dockerfile
+#             image_name: bhuvi2003/transitcard
+
+#     uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/java-test.yml@main
+#     with:
+#       java_version: "21"
+#       pom_path: ${{ matrix.svc.pom_path }}
+#       reports_artifact_name: test-reports-${{ matrix.svc.name }}
+#     secrets:
+#       TEAMS_WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+
+#   sonar:
+#     name: Sonar - ${{ matrix.svc.name }}
+#     needs: test
+#     strategy:
+#       fail-fast: false
+#       matrix:
+#         svc: *services
+#     uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/sonarqube-analysis.yml@main
+#     with:
+#       java_version: "21"
+#       pom_path: ${{ matrix.svc.pom_path }}
+#       sonar_project_key: ${{ matrix.svc.sonar_key }}
+#       run_quality_gate: true
+#     secrets:
+#       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+#       SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+#       SONAR_ORG_KEY: ${{ secrets.SONAR_ORG_KEY }}
+#       TEAMS_WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+
+#   build:
+#     name: Build - ${{ matrix.svc.name }}
+#     needs: sonar
+#     strategy:
+#       fail-fast: false
+#       matrix:
+#         svc: *services
+#     uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/java-build.yml@main
+#     with:
+#       project_name: ${{ matrix.svc.name }}
+#       java_version: "21"
+#       pom_path: ${{ matrix.svc.pom_path }}
+#       build_command: "mvn -B clean package -DskipTests"
+#     secrets:
+#       TEAMS_WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+
+#   docker:
+#     name: Docker - ${{ matrix.svc.name }}
+#     needs: build
+#     permissions:
+#       contents: read
+#       security-events: write
+#       pull-requests: write # Added this to allow Docker Scout comments
+#     strategy:
+#       fail-fast: false
+#       matrix:
+#         svc: *services
+#     uses: Bhuvaneshwaran-17/Modularized-dev-ops/.github/workflows/docker-build-push.yml@main
+#     with:
+#       project_name: ${{ matrix.svc.name }}
+#       image_name: ${{ matrix.svc.image_name }}
+#       context: ${{ matrix.svc.workdir }}
+#       dockerfile: ${{ matrix.svc.dockerfile }}
+#       push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+#     secrets:
+#       REGISTRY_URL: ${{ secrets.REGISTRY_URL }}
+#       REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+#       REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+#       TEAMS_WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
